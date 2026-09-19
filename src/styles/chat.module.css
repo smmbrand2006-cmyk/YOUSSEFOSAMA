@@ -940,6 +940,10 @@
   animation: scaleIn 0.2s ease;
 }
 
+.mobileBackBtn {
+  display: none;
+}
+
 /* ========== RESPONSIVE ========== */
 @media (max-width: 768px) {
   .sidebar {
@@ -952,10 +956,21 @@
   }
   
   .chatMainActive {
-    display: flex;
+    display: flex !important;
     position: absolute;
     inset: 0;
     z-index: 50;
+    width: 100%;
+    height: 100%;
+  }
+
+  .mobileBackBtn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    margin-right: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
   }
   
   .messagesArea {

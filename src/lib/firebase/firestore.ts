@@ -663,3 +663,19 @@ export async function getOrCreateDirectChat(
   return chatRef.id;
 }
 
+/**
+ * Fetch a single chat document by ID
+ */
+export async function getChatDoc(chatId: string): Promise<Chat | null> {
+  try {
+    const snap = await getDoc(doc(db, "chats", chatId));
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as Chat;
+    }
+    return null;
+  } catch (err) {
+    console.error("Failed to get chat doc:", err);
+    return null;
+  }
+}
+

@@ -31,25 +31,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFirebaseUser(user);
 
       if (user) {
-        // Check if we have a stored UID mapping (for code-based auth)
-        const storedUid =
-          typeof window !== "undefined"
-            ? localStorage.getItem("youssef_app_uid")
-            : null;
-        const targetUid = storedUid || user.uid;
+        // Source of truth is ALWAYS Firebase Auth user.uid
+        const targetUid = user.uid;
+        if (typeof window !== "undefined") {
+          localStorage.setItem("youssef_app_uid", user.uid);
+        }
 
         // Listen to user profile in real-time
         const unsubProfile = listenToUserProfile(targetUid, (profile) => {
-          setUserProfile(profile);
+          if (profile) {
+            setUserProfile(profile);
+          } else {
+            // Safe fallback profile to prevent redirect bounce
+            const savedCode =
+              typeof window !== "undefined"
+                ? localStorage.getItem("youssef_app_code")
+                : "";
+            const derivedCode =
+              savedCode || user.email?.split("@")[0] || user.uid.substring(0, 6);
+
+            setUserProfile({
+              uid: user.uid,
+              userCode: derivedCode,
+              displayName: user.displayName || derivedCode,
+              bio: "",
+              createdAt: new Date() as any,
+              lastSeen: new Date() as any,
+              isOnline: true,
+              contacts: [],
+              blockedUsers: [],
+              settings: {
+                lastSeenPrivacy: "everyone",
+                statusPrivacy: "everyone",
+                readReceipts: true,
+                notificationSound: true,
+              },
+            });
+          }
           setLoading(false);
         });
 
-        // Set user online
-        setUserOnline(targetUid);
+        // Set user online with safety catch
+        try {
+          setUserOnline(targetUid);
+        } catch (e) {
+          console.warn("Presence set error:", e);
+        }
 
         // Cleanup on window close
         const handleBeforeUnload = () => {
-          setUserOffline(targetUid);
+          try {
+            setUserOffline(targetUid);
+          } catch (e) {}
         };
         window.addEventListener("beforeunload", handleBeforeUnload);
 

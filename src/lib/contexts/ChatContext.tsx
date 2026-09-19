@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import { listenToChats } from "@/lib/firebase/firestore";
 import { Chat } from "@/lib/types/chat";
@@ -23,6 +23,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const { userProfile } = useAuth();
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
+  const activeChatRef = useRef<Chat | null>(null);
+
+  useEffect(() => {
+    activeChatRef.current = activeChat;
+  }, [activeChat]);
 
   useEffect(() => {
     if (!userProfile) {
@@ -38,9 +43,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setChats(filtered);
 
       // Update active chat if it changed
-      if (activeChat) {
-        const updated = newChats.find((c) => c.id === activeChat.id);
-        if (updated) setActiveChat(updated);
+      if (activeChatRef.current) {
+        const updated = newChats.find((c) => c.id === activeChatRef.current?.id);
+        if (updated) {
+          setActiveChat(updated);
+        }
       }
     });
 

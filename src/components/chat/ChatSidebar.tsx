@@ -12,9 +12,10 @@ import {
   rejectFriendRequest,
   openOrCreateSupportChat,
   getOrCreateDirectChat,
+  getChatDoc,
 } from "@/lib/firebase/firestore";
 import { signOut } from "@/lib/firebase/auth";
-import { FriendRequest } from "@/lib/types/chat";
+import { FriendRequest, Chat } from "@/lib/types/chat";
 import { UserProfile } from "@/lib/types/user";
 import { formatMessageTime } from "@/lib/utils/formatDate";
 import {
@@ -60,7 +61,23 @@ export default function ChatSidebar() {
     setOpeningSupport(true);
     try {
       const chatId = await openOrCreateSupportChat(userProfile);
-      router.push(`/chat/${chatId}`);
+      const chatDoc = await getChatDoc(chatId);
+      if (chatDoc) {
+        setActiveChat(chatDoc);
+      } else {
+        setActiveChat({
+          id: chatId,
+          type: "direct",
+          participants: [userProfile.uid, "support_official_123"],
+          participantNames: {
+            [userProfile.uid]: userProfile.displayName,
+            support_official_123: "الدعم الفني (123)",
+          },
+        } as any);
+      }
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `/chat/${chatId}`);
+      }
     } catch (err: any) {
       alert(err.message || "حدث خطأ أثناء فتح محادثة الدعم.");
     } finally {
@@ -77,7 +94,23 @@ export default function ChatSidebar() {
     try {
       const chatId = await getOrCreateDirectChat(userProfile, targetUser);
       setTab("chats");
-      router.push(`/chat/${chatId}`);
+      const chatDoc = await getChatDoc(chatId);
+      if (chatDoc) {
+        setActiveChat(chatDoc);
+      } else {
+        setActiveChat({
+          id: chatId,
+          type: "direct",
+          participants: [userProfile.uid, targetUser.uid],
+          participantNames: {
+            [userProfile.uid]: userProfile.displayName || userProfile.userCode,
+            [targetUser.uid]: targetUser.displayName || targetUser.userCode,
+          },
+        } as any);
+      }
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `/chat/${chatId}`);
+      }
     } catch (err: any) {
       alert(err.message || "حدث خطأ أثناء فتح المحادثة المباشرة.");
     }
@@ -116,7 +149,13 @@ export default function ChatSidebar() {
   const handleAcceptRequest = async (requestId: string) => {
     try {
       const chatId = await acceptFriendRequest(requestId);
-      router.push(`/chat/${chatId}`);
+      const chatDoc = await getChatDoc(chatId);
+      if (chatDoc) {
+        setActiveChat(chatDoc);
+      }
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `/chat/${chatId}`);
+      }
     } catch (err: any) {
       alert(err.message || "Failed to accept request");
     }
@@ -137,7 +176,9 @@ export default function ChatSidebar() {
 
   const handleChatClick = (chat: any) => {
     setActiveChat(chat);
-    router.push(`/chat/${chat.id}`);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `/chat/${chat.id}`);
+    }
   };
 
   const getOtherParticipant = (chat: any) => {

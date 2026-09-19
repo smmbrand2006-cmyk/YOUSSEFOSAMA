@@ -11,6 +11,7 @@ import {
   markChatAsRead,
   deleteMessage,
   addReaction,
+  getChatDoc,
 } from "@/lib/firebase/firestore";
 import {
   setTyping,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/firebase/realtime";
 import { encodeImageToBase64 } from "@/lib/utils/imageEncoder";
 import { Message } from "@/lib/types/message";
+import { Chat } from "@/lib/types/chat";
 import { formatMessageTime, formatLastSeen } from "@/lib/utils/formatDate";
 import {
   ArrowLeft,
@@ -36,13 +38,27 @@ import {
 } from "lucide-react";
 import styles from "@/styles/chat.module.css";
 
-export default function ChatClient() {
+export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {}) {
   const params = useParams();
   const router = useRouter();
-  const chatId = params.chatId as string;
   const { userProfile } = useAuth();
   const { chats, setActiveChat } = useChats();
   const { initiateCall } = useCall();
+
+  const [urlId, setUrlId] = useState("");
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const parts = window.location.pathname.split("/").filter(Boolean);
+      if (parts[0] === "chat" && parts[1] && parts[1] !== "direct") {
+        setUrlId(parts[1]);
+      }
+    }
+  }, []);
+
+  const chatId =
+    chatIdProp ||
+    (params?.chatId && params.chatId !== "direct" ? (params.chatId as string) : "") ||
+    urlId;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
@@ -57,6 +73,7 @@ export default function ChatClient() {
     message: Message;
   } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [standaloneChat, setStandaloneChat] = useState<Chat | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -64,13 +81,21 @@ export default function ChatClient() {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Find current chat
-  const currentChat = chats.find((c) => c.id === chatId);
-  const otherUid = currentChat?.participants.find(
-    (id) => id !== userProfile?.uid
-  );
-  const otherName = otherUid
-    ? currentChat?.participantNames?.[otherUid] || "Unknown"
-    : "Unknown";
+  const currentChat = chats.find((c) => c.id === chatId) || standaloneChat;
+
+  useEffect(() => {
+    if (!chatId) return;
+    if (!chats.some((c) => c.id === chatId)) {
+      getChatDoc(chatId).then((doc) => {
+        if (doc) setStandaloneChat(doc);
+      });
+    }
+  }, [chatId, chats]);
+
+  // Set active chat when found
+  useEffect(() => {
+    if (currentChat) setActiveChat(currentChat);
+  }, [currentChat?.id]);
 
   // Listen to messages with instant synchronization
   useEffect(() => {
@@ -98,11 +123,20 @@ export default function ChatClient() {
     }
   }, [chatId, userProfile?.uid, messages.length]);
 
-  // Set active chat
-  useEffect(() => {
-    if (currentChat) setActiveChat(currentChat);
-    return () => setActiveChat(null);
-  }, [currentChat?.id]);
+  const otherUid = currentChat?.participants?.find(
+    (id) => id !== userProfile?.uid
+  );
+  const isSupport =
+    currentChat?.isSupport ||
+    otherUid === "support_123_uid" ||
+    otherUid === "support_official_123";
+  const otherName = isSupport
+    ? "الدعم الفني (123)"
+    : otherUid
+    ? currentChat?.participantNames?.[otherUid] || "مستخدم"
+    : currentChat?.type === "group"
+    ? (currentChat as any)?.name || "مجموعة"
+    : "مستخدم";
 
   // Listen to typing
   useEffect(() => {
@@ -309,18 +343,24 @@ export default function ChatClient() {
   };
 
   return (
-    <div className={styles.chatMain}>
+    <div className={`${styles.chatMain} ${styles.chatMainActive}`}>
       <div className={styles.chatMainPattern} />
 
       {/* Header */}
       <div className={styles.chatHeader}>
         <div className={styles.chatHeaderLeft}>
           <button
-            className="btn-icon"
-            onClick={() => router.push("/chat")}
-            style={{ display: "none" }}
+            className={`btn-icon ${styles.mobileBackBtn}`}
+            onClick={() => {
+              setActiveChat(null);
+              if (typeof window !== "undefined") {
+                window.history.replaceState(null, "", "/chat");
+              }
+              router.push("/chat");
+            }}
+            title="رجوع"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={22} />
           </button>
 
           <div

@@ -11,6 +11,13 @@ export default function Home() {
   useEffect(() => {
     if (!loading) {
       if (isAuthenticated) {
+        // If user is already on a sub-route (e.g. /chat/xyz, /profile), do not bounce to /chat!
+        if (typeof window !== "undefined") {
+          const path = window.location.pathname;
+          if (path && path !== "/" && path !== "/index.html") {
+            return;
+          }
+        }
         router.replace("/chat");
       } else {
         router.replace("/auth/login");
