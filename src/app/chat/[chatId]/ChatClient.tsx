@@ -706,7 +706,7 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           )}
         </div>
 
-        <div className={styles.inputWrapper}>
+        <div className={styles.inputBox}>
           <textarea
             ref={textareaRef}
             placeholder="اكتب رسالتك هنا..."

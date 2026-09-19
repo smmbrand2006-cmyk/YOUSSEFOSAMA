@@ -576,12 +576,15 @@
 
 /* ========== MESSAGE INPUT ========== */
 .inputArea {
-  padding: 8px 16px;
+  padding: 10px 16px;
   background: var(--bg-secondary);
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 10px;
   z-index: 10;
+  width: 100%;
+  position: relative;
+  box-sizing: border-box;
 }
 
 .inputReply {
@@ -614,30 +617,50 @@
   text-overflow: ellipsis;
 }
 
-.inputBox {
+.inputBox,
+.inputWrapper {
   flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 14px;
   background: var(--bg-primary);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-color);
-  min-height: 44px;
+  min-height: 46px;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+  box-sizing: border-box;
 }
 
-.inputBox textarea {
+.inputBox:focus-within,
+.inputWrapper:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.25);
+}
+
+.inputBox textarea,
+.inputWrapper textarea {
   flex: 1;
+  width: 100%;
+  min-width: 0;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
   resize: none;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   color: var(--text-primary);
   background: transparent;
   max-height: 120px;
-  line-height: 1.4;
-  padding: 2px 0;
+  line-height: 1.5;
+  padding: 4px 0;
+  font-family: inherit;
+  box-sizing: border-box;
 }
 
-.inputBox textarea::placeholder {
+.inputBox textarea::placeholder,
+.inputWrapper textarea::placeholder {
   color: var(--text-tertiary);
 }
 
@@ -648,8 +671,8 @@
 }
 
 .sendBtn {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   border-radius: var(--radius-full);
   background: var(--primary-gradient);
   color: white;
@@ -659,16 +682,26 @@
   cursor: pointer;
   transition: all var(--transition-normal);
   flex-shrink: 0;
+  border: none;
+  outline: none;
   box-shadow: var(--shadow-sm);
 }
 
-.sendBtn:hover {
+.sendBtn:hover:not(:disabled) {
   box-shadow: var(--shadow-glow);
   transform: scale(1.05);
 }
 
-.sendBtn:active {
+.sendBtn:active:not(:disabled) {
   transform: scale(0.95);
+}
+
+.sendBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--text-tertiary);
+  box-shadow: none;
+  transform: none;
 }
 
 /* ========== VOICE RECORDER ========== */
