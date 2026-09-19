@@ -89,16 +89,18 @@ export async function sendFriendRequest(
   toName: string,
   message: string = ""
 ): Promise<string> {
-  // Check if request already exists
+  // Check if request already exists (Single field query)
   const existingQuery = query(
     collection(db, "friendRequests"),
-    where("fromUid", "==", fromUid),
-    where("toUid", "==", toUid),
-    where("status", "==", "pending")
+    where("fromUid", "==", fromUid)
   );
-  const existing = await getDocs(existingQuery);
-  if (!existing.empty) {
-    throw new Error("Friend request already sent.");
+  const existingSnap = await getDocs(existingQuery);
+  const alreadySent = existingSnap.docs.some((d) => {
+    const data = d.data();
+    return data.toUid === toUid && data.status === "pending";
+  });
+  if (alreadySent) {
+    throw new Error("لقد قمت بإرسال طلب بالفعل لهذا المستخدم.");
   }
 
   // Check if already contacts
@@ -196,59 +198,85 @@ export async function rejectFriendRequest(requestId: string): Promise<void> {
 }
 
 /**
- * Listen to incoming friend requests
+ * Listen to incoming friend requests (Zero-index required)
  */
 export function listenToFriendRequests(
   uid: string,
   callback: (requests: FriendRequest[]) => void
 ) {
+  // Single-field query: automatically indexed, zero composite index needed
   const q = query(
     collection(db, "friendRequests"),
-    where("toUid", "==", uid),
-    where("status", "==", "pending"),
-    orderBy("createdAt", "desc")
+    where("toUid", "==", uid)
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const requests: FriendRequest[] = [];
-    snapshot.forEach((d) => {
-      requests.push({ id: d.id, ...d.data() } as FriendRequest);
-    });
-    callback(requests);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const requests: FriendRequest[] = [];
+      snapshot.forEach((d) => {
+        const data = d.data() as FriendRequest;
+        if (data.status === "pending") {
+          requests.push({ id: d.id, ...data });
+        }
+      });
+      // Sort client-side
+      requests.sort((a, b) => {
+        const aTime = (a.createdAt as any)?.toMillis?.() || 0;
+        const bTime = (b.createdAt as any)?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
+      callback(requests);
+    },
+    (err) => {
+      console.warn("listenToFriendRequests listener note:", err);
+    }
+  );
 }
 
 // ==================== CHAT OPERATIONS ====================
 
 /**
- * Listen to user's chat list
+ * Listen to user's chat list (Zero-index required)
  */
 export function listenToChats(
   uid: string,
   callback: (chats: Chat[]) => void
 ) {
+  // Single-field array query: automatically indexed, zero composite index needed
   const q = query(
     collection(db, "chats"),
-    where("participants", "array-contains", uid),
-    orderBy("createdAt", "desc")
+    where("participants", "array-contains", uid)
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const chatsList: Chat[] = [];
-    snapshot.forEach((d) => {
-      chatsList.push({ id: d.id, ...d.data() } as Chat);
-    });
-    // Sort: pinned first, then by last message time
-    chatsList.sort((a, b) => {
-      const aPinned = a.isPinned?.[uid] ? 1 : 0;
-      const bPinned = b.isPinned?.[uid] ? 1 : 0;
-      if (aPinned !== bPinned) return bPinned - aPinned;
-      const aTime = a.lastMessage?.createdAt?.toMillis?.() || 0;
-      const bTime = b.lastMessage?.createdAt?.toMillis?.() || 0;
-      return bTime - aTime;
-    });
-    callback(chatsList);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const chatsList: Chat[] = [];
+      snapshot.forEach((d) => {
+        chatsList.push({ id: d.id, ...d.data() } as Chat);
+      });
+      // Sort client-side: pinned first, then by last message time or createdAt
+      chatsList.sort((a, b) => {
+        const aPinned = a.isPinned?.[uid] ? 1 : 0;
+        const bPinned = b.isPinned?.[uid] ? 1 : 0;
+        if (aPinned !== bPinned) return bPinned - aPinned;
+        const aTime =
+          (a.lastMessage?.createdAt as any)?.toMillis?.() ||
+          (a.createdAt as any)?.toMillis?.() ||
+          0;
+        const bTime =
+          (b.lastMessage?.createdAt as any)?.toMillis?.() ||
+          (b.createdAt as any)?.toMillis?.() ||
+          0;
+        return bTime - aTime;
+      });
+      callback(chatsList);
+    },
+    (err) => {
+      console.warn("listenToChats listener note:", err);
+    }
+  );
 }
 
 /**
