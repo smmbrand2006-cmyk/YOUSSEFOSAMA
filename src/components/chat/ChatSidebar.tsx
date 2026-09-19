@@ -13,6 +13,8 @@ import {
   openOrCreateSupportChat,
   getOrCreateDirectChat,
   getChatDoc,
+  blockUser,
+  unblockUser,
 } from "@/lib/firebase/firestore";
 import { signOut } from "@/lib/firebase/auth";
 import { FriendRequest, Chat } from "@/lib/types/chat";
@@ -30,6 +32,7 @@ import {
   VolumeX,
   Headphones,
 } from "lucide-react";
+import UserProfileModal from "./UserProfileModal";
 import styles from "@/styles/chat.module.css";
 
 type SidebarTab = "chats" | "requests" | "search";
@@ -47,6 +50,8 @@ export default function ChatSidebar() {
   const [showMenu, setShowMenu] = useState(false);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const [openingSupport, setOpeningSupport] = useState(false);
+  const [selectedProfileUser, setSelectedProfileUser] = useState<UserProfile | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Listen to friend requests
   useEffect(() => {
@@ -170,11 +175,12 @@ export default function ChatSidebar() {
   };
 
   const getOtherParticipant = (chat: any) => {
-    if (!userProfile) return { name: "Unknown" };
+    if (!userProfile) return { uid: "", name: "Unknown" };
     const otherId = chat.participants.find(
       (id: string) => id !== userProfile.uid
     );
     return {
+      uid: otherId || "",
       name: chat.participantNames?.[otherId] || "Unknown",
     };
   };
@@ -428,7 +434,8 @@ export default function ChatSidebar() {
                 const other =
                   chat.type === "direct"
                     ? getOtherParticipant(chat)
-                    : { name: chat.groupName || "Group" };
+                    : { uid: "", name: chat.groupName || "Group" };
+                const isBlocked = !!(other.uid && userProfile?.blockedUsers?.includes(other.uid));
                 const unread = chat.unreadCount?.[userProfile?.uid || ""] || 0;
                 const isPinned = chat.isPinned?.[userProfile?.uid || ""];
                 const isMuted = chat.isMuted?.[userProfile?.uid || ""];
@@ -443,10 +450,23 @@ export default function ChatSidebar() {
                   >
                     <div
                       className="avatar"
+                      onClick={(e) => {
+                        if (other.uid) {
+                          e.stopPropagation();
+                          setSelectedProfileUser({
+                            uid: other.uid,
+                            displayName: other.name,
+                            userCode: "",
+                          } as any);
+                          setShowProfileModal(true);
+                        }
+                      }}
+                      title="عرض الملف التعريفي"
                       style={{
                         background: "var(--primary-gradient)",
                         color: "white",
                         fontWeight: 700,
+                        cursor: other.uid ? "pointer" : "default",
                       }}
                     >
                       {getInitials(other.name)}
@@ -456,6 +476,11 @@ export default function ChatSidebar() {
                       <div className={styles.chatItemTop}>
                         <span className={styles.chatItemName}>
                           {other.name}
+                          {isBlocked && (
+                            <span style={{ color: "#ef4444", fontSize: "0.75rem", marginRight: 4 }}>
+                              (محظور 🚫)
+                            </span>
+                          )}
                         </span>
                         <span
                           className={`${styles.chatItemTime} ${
@@ -569,12 +594,19 @@ export default function ChatSidebar() {
                   >
                     <div
                       className="avatar"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedProfileUser(user);
+                        setShowProfileModal(true);
+                      }}
+                      title="عرض الملف التعريفي"
                       style={{
                         background: isSupport
                           ? "linear-gradient(135deg, #128C7E, #25D366)"
                           : "var(--primary-gradient)",
                         color: "white",
                         fontWeight: 700,
+                        cursor: "pointer",
                       }}
                     >
                       {isSupport ? (
@@ -669,6 +701,32 @@ export default function ChatSidebar() {
           <span>{userProfile.displayName}</span>
         </div>
       )}
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={showProfileModal}
+        onClose={() => {
+          setShowProfileModal(false);
+          setSelectedProfileUser(null);
+        }}
+        user={selectedProfileUser}
+        isBlocked={!!(selectedProfileUser && userProfile?.blockedUsers?.includes(selectedProfileUser.uid))}
+        onToggleBlock={async () => {
+          if (!userProfile || !selectedProfileUser) return;
+          const targetUid = selectedProfileUser.uid;
+          const isB = userProfile.blockedUsers?.includes(targetUid);
+          try {
+            if (isB) {
+              await unblockUser(userProfile.uid, targetUid);
+            } else {
+              await blockUser(userProfile.uid, targetUid);
+            }
+          } catch (err: any) {
+            alert("تعذر تحديث حالة الحظر: " + (err.message || "حاول مرة أخرى"));
+          }
+        }}
+        isSupport={selectedProfileUser?.userCode === "123"}
+      />
     </div>
   );
 }

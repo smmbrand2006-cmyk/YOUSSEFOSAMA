@@ -679,3 +679,23 @@ export async function getChatDoc(chatId: string): Promise<Chat | null> {
   }
 }
 
+/**
+ * Block a user
+ */
+export async function blockUser(currentUid: string, targetUid: string): Promise<void> {
+  const userRef = doc(db, "users", currentUid);
+  await updateDoc(userRef, {
+    blockedUsers: arrayUnion(targetUid),
+  });
+}
+
+/**
+ * Unblock a user
+ */
+export async function unblockUser(currentUid: string, targetUid: string): Promise<void> {
+  const userRef = doc(db, "users", currentUid);
+  await updateDoc(userRef, {
+    blockedUsers: arrayRemove(targetUid),
+  });
+}
+

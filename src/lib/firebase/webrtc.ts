@@ -7,19 +7,96 @@ import {
   collection,
   addDoc,
   serverTimestamp,
-  deleteDoc,
 } from "firebase/firestore";
 import { db } from "./config";
 import { Call, ICECandidate } from "@/lib/types/call";
 
-// Free STUN servers (for development; add TURN for production)
+// Enhanced multi-STUN configuration for seamless Emulator <-> Mobile Phone traversal
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:global.stun.twilio.com:3478" },
+    { urls: "stun:stun.cloudflare.com:3478" },
   ],
+  iceCandidatePoolSize: 10,
+  bundlePolicy: "max-bundle",
 };
+
+/**
+ * Safe getUserMedia with multi-tier fallback for emulators and cross-device calling
+ * (Handles missing webcam, missing mic in emulators, overconstrained devices, etc.)
+ */
+async function getSafeUserMedia(type: "audio" | "video"): Promise<MediaStream> {
+  const audioConstraints: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+
+  // 1. If video requested, attempt user-facing video first
+  if (type === "video") {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+    } catch (vErr1) {
+      console.warn("User-facing video failed, trying simple video:", vErr1);
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: true,
+        });
+      } catch (vErr2) {
+        console.warn("Video failed completely on this device/emulator. Falling back to audio only:", vErr2);
+      }
+    }
+  }
+
+  // 2. Try optimized audio
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: audioConstraints,
+      video: false,
+    });
+  } catch (aErr1) {
+    console.warn("Optimized audio constraints failed, trying basic audio:", aErr1);
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+    } catch (aErr2) {
+      console.warn(
+        "No microphone detected (common in Android emulators or PCs without input device). Creating virtual silent audio track to enable connection:",
+        aErr2
+      );
+      // 3. Last-resort virtual audio stream (allows connection so caller/callee can still connect & hear)
+      try {
+        const AudioContextClass =
+          window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          const ctx = new AudioContextClass();
+          const osc = ctx.createOscillator();
+          const dst = ctx.createMediaStreamDestination();
+          const gain = ctx.createGain();
+          gain.gain.value = 0; // Silent
+          osc.connect(gain);
+          gain.connect(dst);
+          osc.start();
+          return dst.stream;
+        }
+      } catch (ctxErr) {
+        console.error("Failed to create fallback audio stream:", ctxErr);
+      }
+      throw new Error("تعذر الوصول لأي جهاز صوت أو ميكروفون. يرجى تفعيل الصوت في المحاكي.");
+    }
+  }
+}
 
 /**
  * Create a new call (caller side)
@@ -37,21 +114,18 @@ export async function createCall(
   peerConnection: RTCPeerConnection;
   localStream: MediaStream;
 }> {
-  // Get local media stream
-  const localStream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: type === "video",
-  });
+  // 1. Get local media stream (safe for emulators and phones)
+  const localStream = await getSafeUserMedia(type);
 
-  // Create peer connection
+  // 2. Create peer connection
   const peerConnection = new RTCPeerConnection(ICE_SERVERS);
 
-  // Add tracks to peer connection
+  // 3. Add tracks to peer connection
   localStream.getTracks().forEach((track) => {
     peerConnection.addTrack(track, localStream);
   });
 
-  // Create call document in Firestore
+  // 4. Create call document in Firestore
   const callDoc = doc(collection(db, "calls"));
   const callId = callDoc.id;
 
@@ -67,19 +141,26 @@ export async function createCall(
     startedAt: serverTimestamp(),
   });
 
-  // Listen for ICE candidates and add to Firestore
+  // 5. Send local ICE candidates to Firestore
   peerConnection.onicecandidate = async (event) => {
     if (event.candidate) {
-      await addDoc(collection(db, "calls", callId, "callerCandidates"), {
-        candidate: event.candidate.candidate,
-        sdpMid: event.candidate.sdpMid,
-        sdpMLineIndex: event.candidate.sdpMLineIndex,
-      });
+      try {
+        await addDoc(collection(db, "calls", callId, "callerCandidates"), {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex,
+        });
+      } catch (err) {
+        console.warn("Failed to save caller candidate:", err);
+      }
     }
   };
 
-  // Create offer
-  const offer = await peerConnection.createOffer();
+  // 6. Create & set local offer
+  const offer = await peerConnection.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: type === "video",
+  });
   await peerConnection.setLocalDescription(offer);
 
   await updateDoc(callDoc, {
@@ -89,13 +170,33 @@ export async function createCall(
     },
   });
 
-  // Listen for answer
-  onSnapshot(callDoc, (snapshot) => {
+  // 7. Candidate queue to prevent InvalidStateError on emulator/mobile
+  const pendingCandidates: RTCIceCandidateInit[] = [];
+
+  // 8. Listen for receiver's answer
+  onSnapshot(callDoc, async (snapshot) => {
     const data = snapshot.data();
     if (data?.answer && !peerConnection.currentRemoteDescription) {
-      const answer = new RTCSessionDescription(data.answer);
-      peerConnection.setRemoteDescription(answer);
+      try {
+        const answer = new RTCSessionDescription(data.answer);
+        await peerConnection.setRemoteDescription(answer);
+
+        // Drain queued ICE candidates
+        while (pendingCandidates.length > 0) {
+          const cand = pendingCandidates.shift();
+          if (cand) {
+            try {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (candErr) {
+              console.warn("Queued candidate error:", candErr);
+            }
+          }
+        }
+      } catch (sdpErr) {
+        console.error("Failed to set remote description:", sdpErr);
+      }
     }
+
     // Handle call ended/rejected
     if (data?.status === "ended" || data?.status === "rejected") {
       peerConnection.close();
@@ -103,22 +204,30 @@ export async function createCall(
     }
   });
 
-  // Listen for callee ICE candidates
+  // 9. Listen for callee ICE candidates
   onSnapshot(
     collection(db, "calls", callId, "calleeCandidates"),
-    (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
+    async (snapshot) => {
+      for (const change of snapshot.docChanges()) {
         if (change.type === "added") {
           const data = change.doc.data() as ICECandidate;
-          peerConnection.addIceCandidate(
-            new RTCIceCandidate({
-              candidate: data.candidate,
-              sdpMid: data.sdpMid,
-              sdpMLineIndex: data.sdpMLineIndex,
-            })
-          );
+          const candidateInit = {
+            candidate: data.candidate,
+            sdpMid: data.sdpMid,
+            sdpMLineIndex: data.sdpMLineIndex,
+          };
+
+          if (peerConnection.remoteDescription) {
+            try {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(candidateInit));
+            } catch (err) {
+              console.warn("Direct candidate add error:", err);
+            }
+          } else {
+            pendingCandidates.push(candidateInit);
+          }
         }
-      });
+      }
     }
   );
 
@@ -138,39 +247,43 @@ export async function answerCall(
   const callSnap = await getDoc(callDoc);
   const callData = callSnap.data() as Call;
 
-  // Get local media stream
-  const localStream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: callData.type === "video",
-  });
+  // 1. Get local media stream (safe for emulators and phones)
+  const localStream = await getSafeUserMedia(callData.type);
 
-  // Create peer connection
+  // 2. Create peer connection
   const peerConnection = new RTCPeerConnection(ICE_SERVERS);
 
-  // Add tracks
+  // 3. Add tracks
   localStream.getTracks().forEach((track) => {
     peerConnection.addTrack(track, localStream);
   });
 
-  // Listen for ICE candidates
+  // 4. Send local ICE candidates to Firestore
   peerConnection.onicecandidate = async (event) => {
     if (event.candidate) {
-      await addDoc(collection(db, "calls", callId, "calleeCandidates"), {
-        candidate: event.candidate.candidate,
-        sdpMid: event.candidate.sdpMid,
-        sdpMLineIndex: event.candidate.sdpMLineIndex,
-      });
+      try {
+        await addDoc(collection(db, "calls", callId, "calleeCandidates"), {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex,
+        });
+      } catch (err) {
+        console.warn("Failed to save callee candidate:", err);
+      }
     }
   };
 
-  // Set remote description (offer from caller)
+  // 5. Candidate queue
+  const pendingCandidates: RTCIceCandidateInit[] = [];
+
+  // 6. Set remote description (offer from caller)
   if (callData.offer) {
     await peerConnection.setRemoteDescription(
       new RTCSessionDescription(callData.offer)
     );
   }
 
-  // Create answer
+  // 7. Create answer
   const answer = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answer);
 
@@ -182,22 +295,40 @@ export async function answerCall(
     status: "active",
   });
 
-  // Listen for caller ICE candidates
+  // Drain any queued candidates
+  while (pendingCandidates.length > 0) {
+    const cand = pendingCandidates.shift();
+    if (cand) {
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (e) {}
+    }
+  }
+
+  // 8. Listen for caller ICE candidates
   onSnapshot(
     collection(db, "calls", callId, "callerCandidates"),
-    (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
+    async (snapshot) => {
+      for (const change of snapshot.docChanges()) {
         if (change.type === "added") {
           const data = change.doc.data() as ICECandidate;
-          peerConnection.addIceCandidate(
-            new RTCIceCandidate({
-              candidate: data.candidate,
-              sdpMid: data.sdpMid,
-              sdpMLineIndex: data.sdpMLineIndex,
-            })
-          );
+          const candidateInit = {
+            candidate: data.candidate,
+            sdpMid: data.sdpMid,
+            sdpMLineIndex: data.sdpMLineIndex,
+          };
+
+          if (peerConnection.remoteDescription) {
+            try {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(candidateInit));
+            } catch (err) {
+              console.warn("Direct candidate add error:", err);
+            }
+          } else {
+            pendingCandidates.push(candidateInit);
+          }
         }
-      });
+      }
     }
   );
 
@@ -208,24 +339,32 @@ export async function answerCall(
  * End a call
  */
 export async function endCall(callId: string): Promise<void> {
-  await updateDoc(doc(db, "calls", callId), {
-    status: "ended",
-    endedAt: serverTimestamp(),
-  });
+  try {
+    await updateDoc(doc(db, "calls", callId), {
+      status: "ended",
+      endedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("Error ending call:", err);
+  }
 }
 
 /**
  * Reject a call
  */
 export async function rejectCall(callId: string): Promise<void> {
-  await updateDoc(doc(db, "calls", callId), {
-    status: "rejected",
-    endedAt: serverTimestamp(),
-  });
+  try {
+    await updateDoc(doc(db, "calls", callId), {
+      status: "rejected",
+      endedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("Error rejecting call:", err);
+  }
 }
 
 /**
- * Listen for incoming calls
+ * Listen for incoming calls (Recent ringing calls only)
  */
 export function listenForIncomingCalls(
   uid: string,
@@ -237,7 +376,12 @@ export function listenForIncomingCalls(
       if (change.type === "added") {
         const data = change.doc.data() as Call;
         if (data.receiverId === uid && data.status === "ringing") {
-          callback({ ...data, id: change.doc.id });
+          // Verify call was placed recently (within last 60 seconds)
+          const startedAt = data.startedAt?.toDate ? data.startedAt.toDate() : new Date();
+          const ageMs = Date.now() - startedAt.getTime();
+          if (ageMs < 60000) {
+            callback({ ...data, id: change.doc.id });
+          }
         }
       }
     });

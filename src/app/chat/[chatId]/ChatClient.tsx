@@ -12,6 +12,8 @@ import {
   deleteMessage,
   addReaction,
   getChatDoc,
+  blockUser,
+  unblockUser,
 } from "@/lib/firebase/firestore";
 import {
   setTyping,
@@ -37,7 +39,9 @@ import {
   Reply,
   Trash2,
   Copy,
+  Ban,
 } from "lucide-react";
+import UserProfileModal from "@/components/chat/UserProfileModal";
 import styles from "@/styles/chat.module.css";
 
 export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {}) {
@@ -76,6 +80,7 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
   } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [standaloneChat, setStandaloneChat] = useState<Chat | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -150,6 +155,27 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
       (currentChat?.type === "group" ? (currentChat as any)?.name : null) ||
       (otherUid ? `مستخدم #${otherUid.substring(0, 4)}` : "مستخدم");
 
+  // Check if current user blocked the other user
+  const isBlocked = !!(
+    otherUid &&
+    userProfile?.blockedUsers &&
+    userProfile.blockedUsers.includes(otherUid)
+  );
+
+  const handleToggleBlock = async () => {
+    if (!userProfile || !otherUid || isSupport) return;
+    try {
+      if (isBlocked) {
+        await unblockUser(userProfile.uid, otherUid);
+      } else {
+        await blockUser(userProfile.uid, otherUid);
+      }
+    } catch (err: any) {
+      console.error("Failed to toggle block status:", err);
+      alert("تعذر تحديث حالة الحظر: " + (err.message || "حاول مرة أخرى"));
+    }
+  };
+
   // Listen to typing
   useEffect(() => {
     if (!chatId || !userProfile) return;
@@ -196,6 +222,10 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
   // Send text message (Optimistic 0-second instant delivery)
   const handleSend = async () => {
     if (!inputText.trim() || !userProfile || !chatId) return;
+    if (isBlocked) {
+      alert("لا يمكنك إرسال رسائل لمستخدم محظور.");
+      return;
+    }
 
     const text = inputText.trim();
     setInputText("");
@@ -252,6 +282,10 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !userProfile || !chatId) return;
+    if (isBlocked) {
+      alert("لا يمكنك إرسال وسائط لمستخدم محظور.");
+      return;
+    }
 
     setUploading(true);
     setShowAttach(false);
@@ -302,6 +336,10 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
   const handleStartCall = async (type: "audio" | "video") => {
     if (isSupport) {
       alert("خدمة الدعم الفني مخصصة للمراسلة النصية الفورية حالياً 🎧");
+      return;
+    }
+    if (isBlocked) {
+      alert("لقد قمت بحظر هذا المستخدم. يرجى إلغاء الحظر أولاً لتتمكن من الاتصال به.");
       return;
     }
     if (!otherUid) {
@@ -376,10 +414,18 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
 
       {/* Header */}
       <div className={styles.chatHeader}>
-        <div className={styles.chatHeaderLeft}>
+        <div
+          className={styles.chatHeaderLeft}
+          onClick={() => setShowProfileModal(true)}
+          style={{ cursor: "pointer" }}
+          title="عرض الملف التعريفي"
+        >
           <button
             className={`btn-icon ${styles.mobileBackBtn}`}
-            onClick={() => setActiveChat(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveChat(null);
+            }}
             title="رجوع"
           >
             <ArrowLeft size={22} />
@@ -398,7 +444,9 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           </div>
 
           <div className={styles.chatHeaderInfo}>
-            <div className={styles.chatHeaderName}>{otherName}</div>
+            <div className={styles.chatHeaderName}>
+              {otherName} {isBlocked && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginRight: 4 }}>(محظور 🚫)</span>}
+            </div>
             <div
               className={`${styles.chatHeaderStatus} ${
                 otherOnline || typingUsers.length > 0
@@ -426,7 +474,11 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           >
             <Video size={20} color="var(--text-secondary)" />
           </button>
-          <button className="btn-icon" title="المزيد">
+          <button
+            className="btn-icon"
+            title="الملف التعريفي والخيارات"
+            onClick={() => setShowProfileModal(true)}
+          >
             <MoreVertical size={20} color="var(--text-secondary)" />
           </button>
         </div>
@@ -636,123 +688,152 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
         </div>
       )}
 
-      {/* Input Area */}
-      <div className={styles.inputArea}>
-        {/* Reply preview */}
-        {replyTo && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: "100%",
-              left: 0,
-              right: 0,
-              padding: "8px 16px",
-              background: "var(--bg-primary)",
-              borderTop: "1px solid var(--divider)",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
+      {/* Input Area or Blocked Banner */}
+      {isBlocked ? (
+        <div className={styles.blockedBanner}>
+          <div className={styles.blockedBannerContent}>
+            <Ban size={20} color="#ef4444" />
+            <span>لقد قمت بحظر هذا المستخدم. لا يمكنك إرسال رسائل أو الاتصال به.</span>
+          </div>
+          <button className={styles.unblockBtn} onClick={handleToggleBlock}>
+            إلغاء الحظر
+          </button>
+        </div>
+      ) : (
+        <div className={styles.inputArea}>
+          {/* Reply preview */}
+          {replyTo && (
             <div
               style={{
-                flex: 1,
-                borderLeft: "3px solid var(--primary)",
-                paddingLeft: 8,
+                position: "absolute",
+                bottom: "100%",
+                left: 0,
+                right: 0,
+                padding: "8px 16px",
+                background: "var(--bg-primary)",
+                borderTop: "1px solid var(--divider)",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
               }}
             >
               <div
                 style={{
-                  fontSize: "0.78rem",
-                  fontWeight: 600,
-                  color: "var(--primary)",
+                  flex: 1,
+                  borderLeft: "3px solid var(--primary)",
+                  paddingLeft: 8,
                 }}
               >
-                {replyTo.senderName}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.82rem",
-                  color: "var(--text-secondary)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {replyTo.text}
-              </div>
-            </div>
-            <button className="btn-icon" onClick={() => setReplyTo(null)}>
-              <X size={16} />
-            </button>
-          </div>
-        )}
-
-        <div style={{ position: "relative" }}>
-          <button
-            className="btn-icon"
-            title="إرفاق صورة مشفرة"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowAttach(!showAttach);
-            }}
-          >
-            <Paperclip size={20} color="var(--text-secondary)" />
-          </button>
-
-          {showAttach && (
-            <div
-              className={styles.attachMenu}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <label className={styles.attachItem} style={{ cursor: "pointer" }}>
                 <div
-                  className={styles.attachItemIcon}
-                  style={{ background: "#7C4DFF" }}
+                  style={{
+                    fontSize: "0.78rem",
+                    fontWeight: 600,
+                    color: "var(--primary)",
+                  }}
                 >
-                  <ImageIcon size={22} />
+                  {replyTo.senderName}
                 </div>
-                <span className={styles.attachItemLabel}>
-                  {uploading ? "جاري التشفير..." : "صورة (كود مشفر)"}
-                </span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={handleImageUpload}
-                  disabled={uploading}
-                />
-              </label>
+                <div
+                  style={{
+                    fontSize: "0.82rem",
+                    color: "var(--text-secondary)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {replyTo.text}
+                </div>
+              </div>
+              <button className="btn-icon" onClick={() => setReplyTo(null)}>
+                <X size={16} />
+              </button>
             </div>
           )}
-        </div>
 
-        <div className={styles.inputBox}>
-          <textarea
-            ref={textareaRef}
-            placeholder="اكتب رسالتك هنا..."
-            value={inputText}
-            onChange={handleTextareaChange}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            rows={1}
-          />
-        </div>
+          <div style={{ position: "relative" }}>
+            <button
+              className="btn-icon"
+              title="إرفاق صورة مشفرة"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAttach(!showAttach);
+              }}
+            >
+              <Paperclip size={20} color="var(--text-secondary)" />
+            </button>
 
-        <button
-          className={styles.sendBtn}
-          onClick={handleSend}
-          disabled={!inputText.trim()}
-          title="إرسال"
-        >
-          <Send size={20} />
-        </button>
-      </div>
+            {showAttach && (
+              <div
+                className={styles.attachMenu}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <label className={styles.attachItem} style={{ cursor: "pointer" }}>
+                  <div
+                    className={styles.attachItemIcon}
+                    style={{ background: "#7C4DFF" }}
+                  >
+                    <ImageIcon size={22} />
+                  </div>
+                  <span className={styles.attachItemLabel}>
+                    {uploading ? "جاري التشفير..." : "صورة (كود مشفر)"}
+                  </span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={handleImageUpload}
+                    disabled={uploading}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+
+          <div className={styles.inputBox}>
+            <textarea
+              ref={textareaRef}
+              placeholder="اكتب رسالتك هنا..."
+              value={inputText}
+              onChange={handleTextareaChange}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              rows={1}
+            />
+          </div>
+
+          <button
+            className={styles.sendBtn}
+            onClick={handleSend}
+            disabled={!inputText.trim()}
+            title="إرسال"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+      )}
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        user={{
+          uid: otherUid || "",
+          displayName: otherName,
+          userCode: otherUserData?.userCode || (otherUid ? otherUid.substring(0, 6) : ""),
+          bio: otherUserData?.bio || "",
+          isOnline: otherOnline,
+          lastSeen: otherLastSeen,
+        }}
+        isBlocked={isBlocked}
+        onToggleBlock={handleToggleBlock}
+        isSupport={isSupport}
+      />
     </div>
   );
 }
