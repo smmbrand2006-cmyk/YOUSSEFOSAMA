@@ -183,11 +183,11 @@ export async function acceptFriendRequest(requestId: string): Promise<string> {
     },
   });
 
-  // Send system message
+  // Send system message (encrypted with daily rotating cipher)
   await addDoc(collection(db, "chats", chatRef.id, "messages"), {
     senderId: "system",
     senderName: "System",
-    text: `${toUser.displayName} accepted the friend request. Say hi! 👋`,
+    text: encryptMessageText(`${toUser.displayName} accepted the friend request. Say hi! 👋`),
     type: "system",
     reactions: {},
     isEdited: false,
@@ -451,7 +451,7 @@ export async function deleteMessage(
   if (forEveryone) {
     await updateDoc(doc(db, "chats", chatId, "messages", messageId), {
       isDeleted: true,
-      text: "تم حذف هذه الرسالة",
+      text: encryptMessageText("تم حذف هذه الرسالة"),
     });
   } else {
     await updateDoc(doc(db, "chats", chatId, "messages", messageId), {
@@ -472,12 +472,13 @@ export async function deleteMultipleMessages(
   if (!messageIds || messageIds.length === 0) return;
 
   const batch = writeBatch(db);
+  const encryptedDeletedPlaceholder = encryptMessageText("تم حذف هذه الرسالة");
   messageIds.forEach((msgId) => {
     const msgRef = doc(db, "chats", chatId, "messages", msgId);
     if (forEveryone) {
       batch.update(msgRef, {
         isDeleted: true,
-        text: "تم حذف هذه الرسالة",
+        text: encryptedDeletedPlaceholder,
         deletedAt: serverTimestamp(),
       });
     } else {
@@ -551,8 +552,9 @@ export async function editMessage(
   messageId: string,
   newText: string
 ): Promise<void> {
+  const encryptedText = encryptMessageText(newText);
   await updateDoc(doc(db, "chats", chatId, "messages", messageId), {
-    text: newText,
+    text: encryptedText,
     isEdited: true,
     editedAt: serverTimestamp(),
   });
@@ -694,7 +696,7 @@ export async function openOrCreateSupportChat(currentUser: UserProfile): Promise
       [supportUid]: supportName,
     },
     lastMessage: {
-      text: "مرحباً بك في الدعم الفني! كيف يمكننا مساعدتك اليوم؟ 🎧",
+      text: encryptMessageText("مرحباً بك في الدعم الفني! كيف يمكننا مساعدتك اليوم؟ 🎧"),
       senderId: supportUid,
       type: "text",
       createdAt: serverTimestamp(),
@@ -719,7 +721,7 @@ export async function openOrCreateSupportChat(currentUser: UserProfile): Promise
   await addDoc(collection(db, "chats", chatRef.id, "messages"), {
     senderId: supportUid,
     senderName: supportName,
-    text: "أهلاً بك في الدعم الفني الرسمي! تفضل بكتابة استفسارك أو مشكلتك وسنقوم بالرد عليك في أقرب وقت. 🎧💬",
+    text: encryptMessageText("أهلاً بك في الدعم الفني الرسمي! تفضل بكتابة استفسارك أو مشكلتك وسنقوم بالرد عليك في أقرب وقت. 🎧💬"),
     type: "text",
     reactions: {},
     isEdited: false,

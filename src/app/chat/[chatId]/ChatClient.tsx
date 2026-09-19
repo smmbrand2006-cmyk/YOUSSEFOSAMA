@@ -48,6 +48,13 @@ import {
   ChevronUp,
   ChevronDown,
   Smile,
+  Info,
+  CheckSquare,
+  Bell,
+  BellOff,
+  Download,
+  Palette,
+  Settings,
 } from "lucide-react";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import styles from "@/styles/chat.module.css";
@@ -177,13 +184,22 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
     }
   }, [chatId, userProfile?.uid, messages.length]);
 
-  // Close 3-dots top menu on click outside
+  const topMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close 3-dots top menu on click outside (using ref check)
   useEffect(() => {
-    const handleGlobalClick = () => setShowTopMenu(false);
-    if (showTopMenu) {
-      window.addEventListener("click", handleGlobalClick);
-    }
-    return () => window.removeEventListener("click", handleGlobalClick);
+    if (!showTopMenu) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (topMenuRef.current && !topMenuRef.current.contains(e.target as Node)) {
+        setShowTopMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
   }, [showTopMenu]);
 
   const otherUid = currentChat?.participants?.find(
@@ -254,12 +270,11 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Close context menu and menus on click outside
+  // Close context menu and attach menu on click outside
   useEffect(() => {
     const handleClick = () => {
       setContextMenu(null);
       setShowAttach(false);
-      setShowTopMenu(false);
     };
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
@@ -722,7 +737,7 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
             </button>
 
             {/* 3-Dots Menu with Rich Options */}
-            <div style={{ position: "relative" }}>
+            <div ref={topMenuRef} style={{ position: "relative" }}>
               <button
                 type="button"
                 aria-label="خيارات المحادثة"
@@ -739,13 +754,6 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
               {showTopMenu && (
                 <div
                   className={styles.chatHeaderDropdown}
-                  style={{
-                    position: "absolute",
-                    top: "calc(100% + 8px)",
-                    right: 0,
-                    minWidth: "240px",
-                    zIndex: 1000,
-                  }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
@@ -756,10 +764,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       setShowProfileModal(true);
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: "19px" }}>
-                      info
-                    </span>
-                    معلومات {currentChat?.type === "group" ? "المجموعة" : "جهة الاتصال"}
+                    <Info size={18} color="var(--primary)" />
+                    <span>معلومات {currentChat?.type === "group" ? "المجموعة" : "جهة الاتصال"}</span>
                   </button>
 
                   <button
@@ -771,10 +777,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       setSelectedIds([]);
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: "19px", color: "var(--primary)" }}>
-                      checklist
-                    </span>
-                    تحديد الرسائل (حذف مجمع)
+                    <CheckSquare size={18} color="#38bdf8" />
+                    <span>تحديد الرسائل (حذف مجمع)</span>
                   </button>
 
                   <button
@@ -785,10 +789,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       setShowInChatSearch(true);
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: "19px" }}>
-                      search
-                    </span>
-                    بحث في الرسائل
+                    <Search size={18} color="#a3e635" />
+                    <span>بحث في الرسائل</span>
                   </button>
 
                   <button
@@ -802,10 +804,16 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       }
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: "19px" }}>
-                      {currentChat?.isMuted?.[userProfile?.uid || ""] ? "volume_up" : "volume_off"}
+                    {currentChat?.isMuted?.[userProfile?.uid || ""] ? (
+                      <Bell size={18} color="#facc15" />
+                    ) : (
+                      <BellOff size={18} color="#94a3b8" />
+                    )}
+                    <span>
+                      {currentChat?.isMuted?.[userProfile?.uid || ""]
+                        ? "إلغاء كتم الإشعارات"
+                        : "كتم الإشعارات"}
                     </span>
-                    {currentChat?.isMuted?.[userProfile?.uid || ""] ? "إلغاء كتم الإشعارات" : "كتم الإشعارات"}
                   </button>
 
                   <div className={styles.chatDropdownDivider} />
@@ -819,10 +827,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       setShowClearConfirm("everyone");
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: "19px", color: "var(--error)" }}>
-                      delete_sweep
-                    </span>
-                    مسح المحادثة لدى الجميع 🗑️
+                    <Trash2 size={18} color="#f87171" />
+                    <span>مسح المحادثة لدى الجميع 🗑️</span>
                   </button>
 
                   {/* Clear Chat For Me Option */}
@@ -834,10 +840,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       setShowClearConfirm("me");
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: "19px" }}>
-                      mop
-                    </span>
-                    مسح المحادثة لدي فقط
+                    <Trash2 size={18} color="#cbd5e1" />
+                    <span>مسح المحادثة لدي فقط</span>
                   </button>
 
                   {!isSupport && otherUid && (
@@ -849,10 +853,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                         handleToggleBlock();
                       }}
                     >
-                      <span className="material-symbols-outlined" style={{ fontSize: "19px" }}>
-                        block
-                      </span>
-                      {isBlocked ? "إلغاء حظر المستخدم" : "حظر المستخدم"}
+                      <Ban size={18} color={isBlocked ? "var(--primary)" : "#f87171"} />
+                      <span>{isBlocked ? "إلغاء حظر المستخدم" : "حظر المستخدم"}</span>
                     </button>
                   )}
 
@@ -864,10 +866,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                     className={styles.chatDropdownItem}
                     onClick={handleExportChat}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: "19px", color: "#38bdf8" }}>
-                      file_download
-                    </span>
-                    تصدير المحادثة (Export chat)
+                    <Download size={18} color="#38bdf8" />
+                    <span>تصدير المحادثة (Export chat)</span>
                   </button>
 
                   {/* Wallpaper */}
@@ -879,10 +879,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       alert("خلفيات المحادثة: الوضع الليلي عالي التباين مفعل افتراضياً 🎨");
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: "19px", color: "#facc15" }}>
-                      wallpaper
-                    </span>
-                    خلفية المحادثة (Wallpaper)
+                    <Palette size={18} color="#facc15" />
+                    <span>خلفية المحادثة (Wallpaper)</span>
                   </button>
 
                   {/* Settings */}
@@ -894,10 +892,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       router.push("/profile");
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: "19px", color: "var(--primary)" }}>
-                      settings
-                    </span>
-                    الإعدادات العامة (Settings) ⚙️
+                    <Settings size={18} color="var(--primary)" />
+                    <span>الإعدادات العامة (Settings) ⚙️</span>
                   </button>
                 </div>
               )}
