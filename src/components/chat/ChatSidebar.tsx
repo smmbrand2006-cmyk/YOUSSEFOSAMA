@@ -10,6 +10,7 @@ import {
   sendFriendRequest,
   acceptFriendRequest,
   rejectFriendRequest,
+  openOrCreateSupportChat,
 } from "@/lib/firebase/firestore";
 import { signOut } from "@/lib/firebase/auth";
 import { FriendRequest } from "@/lib/types/chat";
@@ -25,6 +26,7 @@ import {
   LogOut,
   Pin,
   VolumeX,
+  Headphones,
 } from "lucide-react";
 import styles from "@/styles/chat.module.css";
 
@@ -42,6 +44,7 @@ export default function ChatSidebar() {
   const [searching, setSearching] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
+  const [openingSupport, setOpeningSupport] = useState(false);
 
   // Listen to friend requests
   useEffect(() => {
@@ -49,6 +52,20 @@ export default function ChatSidebar() {
     const unsub = listenToFriendRequests(userProfile.uid, setFriendRequests);
     return () => unsub();
   }, [userProfile?.uid]);
+
+  // Support Chat Handler
+  const handleOpenSupport = async () => {
+    if (!userProfile) return;
+    setOpeningSupport(true);
+    try {
+      const chatId = await openOrCreateSupportChat(userProfile);
+      router.push(`/chat/${chatId}`);
+    } catch (err: any) {
+      alert(err.message || "حدث خطأ أثناء فتح محادثة الدعم.");
+    } finally {
+      setOpeningSupport(false);
+    }
+  };
 
   // Search users
   const handleSearch = async () => {
@@ -149,10 +166,25 @@ export default function ChatSidebar() {
         </div>
 
         <div className={styles.sidebarHeaderRight}>
+          {/* زر الدعم الفني المباشر (123) */}
+          <button
+            className={`btn-icon ${styles.sidebarHeaderBtn}`}
+            onClick={handleOpenSupport}
+            title="الدعم الفني (123)"
+            disabled={openingSupport}
+            style={{
+              color: "#25D366",
+              background: "rgba(37, 211, 102, 0.12)",
+              borderRadius: "50%",
+            }}
+          >
+            <Headphones size={20} />
+          </button>
+
           <button
             className={`btn-icon ${styles.sidebarHeaderBtn}`}
             onClick={() => setTab(tab === "search" ? "chats" : "search")}
-            title="Search Users"
+            title="بحث عن مستخدمين"
           >
             <UserPlus size={20} color="var(--text-secondary)" />
           </button>
@@ -160,7 +192,7 @@ export default function ChatSidebar() {
           <button
             className={`btn-icon ${styles.sidebarHeaderBtn}`}
             onClick={() => setTab(tab === "requests" ? "chats" : "requests")}
-            title="Friend Requests"
+            title="طلبات المراسلة"
           >
             <Users size={20} color="var(--text-secondary)" />
             {friendRequests.length > 0 && (
@@ -186,6 +218,17 @@ export default function ChatSidebar() {
                   className="dropdown-item"
                   onClick={() => {
                     setShowMenu(false);
+                    handleOpenSupport();
+                  }}
+                  style={{ color: "var(--primary)", fontWeight: 600 }}
+                >
+                  <Headphones size={16} color="var(--primary)" /> الدعم الفني (#123)
+                </button>
+                <div className="dropdown-divider" />
+                <button
+                  className="dropdown-item"
+                  onClick={() => {
+                    setShowMenu(false);
                     router.push("/profile");
                   }}
                 >
@@ -205,6 +248,51 @@ export default function ChatSidebar() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Support quick banner */}
+      <div
+        onClick={handleOpenSupport}
+        style={{
+          margin: "8px 12px 0",
+          padding: "8px 12px",
+          background: "linear-gradient(135deg, rgba(37, 211, 102, 0.12), rgba(18, 140, 126, 0.08))",
+          border: "1px solid rgba(37, 211, 102, 0.25)",
+          borderRadius: "var(--radius-md)",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          cursor: "pointer",
+          transition: "all 0.2s",
+        }}
+        title="انقر لفتح محادثة فورية مع الدعم"
+      >
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: "var(--primary)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "white",
+            flexShrink: 0,
+          }}
+        >
+          <Headphones size={16} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>
+            الدعم الفني والمساعدة 🎧
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+            تواصل مباشرة مع المشرف كود: #123
+          </div>
+        </div>
+        <span style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: 600 }}>
+          شات ←
+        </span>
       </div>
 
       {/* Search bar */}
@@ -268,8 +356,27 @@ export default function ChatSidebar() {
                 <MessageCircle size={48} />
                 <h3>لا توجد محادثات بعد</h3>
                 <p>
-                  ابحث عن مستخدمين بكودهم الخاص وأرسل لهم طلب صداقة لبدء المحادثة!
+                  ابحث عن مستخدمين بكودهم الخاص وأرسل لهم طلب صداقة، أو ابدأ محادثة فورية مع الدعم الفني!
                 </p>
+                <button
+                  onClick={handleOpenSupport}
+                  style={{
+                    marginTop: 12,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 16px",
+                    background: "var(--primary-gradient)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "var(--radius-full)",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  <Headphones size={16} /> تواصل مع الدعم الفني (#123)
+                </button>
               </div>
             ) : (
               chats.map((chat) => {

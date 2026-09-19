@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { updateUserProfile } from "@/lib/firebase/firestore";
+import { updateUserProfile, openOrCreateSupportChat } from "@/lib/firebase/firestore";
 import { signOut } from "@/lib/firebase/auth";
 import {
   ArrowLeft,
@@ -14,6 +14,7 @@ import {
   Check,
   Shield,
   Copy,
+  Headphones,
 } from "lucide-react";
 import styles from "@/styles/auth.module.css";
 
@@ -27,8 +28,22 @@ export default function ProfilePage() {
   const [bio, setBio] = useState(userProfile?.bio || "");
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [openingSupport, setOpeningSupport] = useState(false);
 
   if (!userProfile) return null;
+
+  const handleSupportChat = async () => {
+    if (!userProfile) return;
+    setOpeningSupport(true);
+    try {
+      const chatId = await openOrCreateSupportChat(userProfile);
+      router.push(`/chat/${chatId}`);
+    } catch (err: any) {
+      alert(err.message || "فشل فتح محادثة الدعم.");
+    } finally {
+      setOpeningSupport(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -279,8 +294,34 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Sign Out */}
+      {/* Actions */}
       <div style={{ padding: "0 20px 30px", marginTop: "auto" }}>
+        {/* زر الدعم الفني (#123) */}
+        <button
+          onClick={handleSupportChat}
+          disabled={openingSupport}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            padding: "14px",
+            background: "linear-gradient(135deg, rgba(37, 211, 102, 0.15), rgba(18, 140, 126, 0.1))",
+            color: "#25D366",
+            border: "1px solid rgba(37, 211, 102, 0.35)",
+            borderRadius: "var(--radius-md)",
+            cursor: "pointer",
+            fontWeight: 700,
+            fontSize: "0.95rem",
+            marginBottom: 12,
+            transition: "all 0.2s",
+          }}
+        >
+          <Headphones size={20} />
+          {openingSupport ? "جاري فتح المحادثة..." : "تواصل مع الدعم الفني (#123) 🎧"}
+        </button>
+
         <button
           onClick={handleSignOut}
           style={{

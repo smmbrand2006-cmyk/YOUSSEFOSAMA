@@ -11,6 +11,8 @@ import {
   doc,
   setDoc,
   getDoc,
+  deleteDoc,
+  updateDoc,
   query,
   where,
   collection,
@@ -57,7 +59,11 @@ export async function registerWithCode(
     where("userCode", "==", cleanCode)
   );
   const existing = await getDocs(codeQuery);
-  if (!existing.empty) {
+  const isPlaceholder =
+    !existing.empty &&
+    existing.docs.every((d) => d.id === "support_official_123");
+
+  if (!existing.empty && !isPlaceholder) {
     throw new Error("هذا الكود مستخدم بالفعل من قبل شخص آخر! يرجى اختيار كود آخر.");
   }
 
@@ -71,7 +77,7 @@ export async function registerWithCode(
       uid: user.uid,
       userCode: cleanCode,
       displayName: displayName.trim(),
-      bio: "",
+      bio: cleanCode === "123" ? "فريق الدعم الفني والمساعدة الرسمي 🎧" : "",
       createdAt: serverTimestamp() as any,
       lastSeen: serverTimestamp() as any,
       isOnline: true,
@@ -86,6 +92,35 @@ export async function registerWithCode(
     };
 
     await setDoc(doc(db, "users", user.uid), userProfile);
+
+    // If there was a placeholder support document, clean it up & migrate chats
+    if (isPlaceholder) {
+      try {
+        await deleteDoc(doc(db, "users", "support_official_123"));
+        const chatsQuery = query(
+          collection(db, "chats"),
+          where("participants", "array-contains", "support_official_123")
+        );
+        const chatsSnap = await getDocs(chatsQuery);
+        for (const chatDoc of chatsSnap.docs) {
+          const chatData = chatDoc.data();
+          const newParticipants = (chatData.participants || []).map(
+            (p: string) => (p === "support_official_123" ? user.uid : p)
+          );
+          const newParticipantNames = { ...(chatData.participantNames || {}) };
+          if (newParticipantNames["support_official_123"]) {
+            newParticipantNames[user.uid] = displayName.trim();
+            delete newParticipantNames["support_official_123"];
+          }
+          await updateDoc(doc(db, "chats", chatDoc.id), {
+            participants: newParticipants,
+            participantNames: newParticipantNames,
+          });
+        }
+      } catch (migrationErr) {
+        console.warn("Support account migration note:", migrationErr);
+      }
+    }
 
     if (typeof window !== "undefined") {
       localStorage.setItem("youssef_app_uid", user.uid);

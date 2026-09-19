@@ -445,3 +445,110 @@ export async function toggleMuteChat(
     [`isMuted.${uid}`]: muted,
   });
 }
+
+/**
+ * Opens or creates a direct support chat with user code '123'
+ */
+export async function openOrCreateSupportChat(currentUser: UserProfile): Promise<string> {
+  const SUPPORT_CODE = "123";
+  const DEFAULT_SUPPORT_NAME = "الدعم الفني (123) 🎧";
+
+  if (currentUser.userCode === SUPPORT_CODE) {
+    throw new Error("أنت مسجل الدخول حالياً بحساب الدعم الفني (123)!");
+  }
+
+  // 1. Find the support user
+  const supportQuery = query(
+    collection(db, "users"),
+    where("userCode", "==", SUPPORT_CODE)
+  );
+  const supportSnap = await getDocs(supportQuery);
+  let supportUid: string;
+  let supportName = DEFAULT_SUPPORT_NAME;
+
+  if (supportSnap.empty) {
+    supportUid = "support_official_123";
+    await setDoc(doc(db, "users", supportUid), {
+      uid: supportUid,
+      userCode: SUPPORT_CODE,
+      displayName: DEFAULT_SUPPORT_NAME,
+      bio: "فريق الدعم الفني والمساعدة الرسمي",
+      createdAt: serverTimestamp(),
+      lastSeen: serverTimestamp(),
+      isOnline: true,
+      contacts: [],
+      blockedUsers: [],
+      settings: {
+        lastSeenPrivacy: "everyone",
+        statusPrivacy: "everyone",
+        readReceipts: true,
+        notificationSound: true,
+      },
+    });
+  } else {
+    const supportDoc = supportSnap.docs[0];
+    supportUid = supportDoc.id;
+    supportName = (supportDoc.data() as UserProfile).displayName || DEFAULT_SUPPORT_NAME;
+  }
+
+  // 2. Check if a direct chat already exists
+  const chatsQuery = query(
+    collection(db, "chats"),
+    where("participants", "array-contains", currentUser.uid)
+  );
+  const chatsSnap = await getDocs(chatsQuery);
+  const existingChat = chatsSnap.docs.find((d) => {
+    const chatData = d.data() as Chat;
+    return chatData.type === "direct" && chatData.participants.includes(supportUid);
+  });
+
+  if (existingChat) {
+    return existingChat.id;
+  }
+
+  // 3. Create new support chat
+  const chatRef = await addDoc(collection(db, "chats"), {
+    type: "direct",
+    participants: [currentUser.uid, supportUid],
+    participantNames: {
+      [currentUser.uid]: currentUser.displayName,
+      [supportUid]: supportName,
+    },
+    lastMessage: {
+      text: "مرحباً بك في الدعم الفني! كيف يمكننا مساعدتك اليوم؟ 🎧",
+      senderId: supportUid,
+      type: "text",
+      createdAt: serverTimestamp(),
+    },
+    lastRead: {
+      [currentUser.uid]: serverTimestamp(),
+      [supportUid]: serverTimestamp(),
+    },
+    createdAt: serverTimestamp(),
+    isPinned: {
+      [currentUser.uid]: true,
+    },
+    isArchived: {},
+    isMuted: {},
+    unreadCount: {
+      [currentUser.uid]: 1,
+      [supportUid]: 0,
+    },
+  });
+
+  // 4. Initial greeting message
+  await addDoc(collection(db, "chats", chatRef.id, "messages"), {
+    senderId: supportUid,
+    senderName: supportName,
+    text: "أهلاً بك في الدعم الفني الرسمي! تفضل بكتابة استفسارك أو مشكلتك وسنقوم بالرد عليك في أقرب وقت. 🎧💬",
+    type: "text",
+    reactions: {},
+    isEdited: false,
+    isDeleted: false,
+    deletedFor: [],
+    createdAt: serverTimestamp(),
+  });
+
+  return chatRef.id;
+}
+
