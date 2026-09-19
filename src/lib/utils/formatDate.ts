@@ -3,9 +3,25 @@ import { Timestamp } from "firebase/firestore";
 /**
  * Format a Firestore timestamp to a human-readable string
  */
-export function formatMessageTime(timestamp: Timestamp | null | undefined): string {
-  if (!timestamp) return "";
-  const date = timestamp.toDate();
+export function formatMessageTime(timestamp: any): string {
+  if (!timestamp) {
+    const now = new Date();
+    return now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  let date: Date;
+  if (typeof timestamp?.toDate === "function") {
+    date = timestamp.toDate();
+  } else if (timestamp instanceof Date) {
+    date = timestamp;
+  } else if (typeof timestamp === "number") {
+    date = new Date(timestamp);
+  } else if (timestamp?.seconds) {
+    date = new Date(timestamp.seconds * 1000);
+  } else {
+    date = new Date();
+  }
+
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));

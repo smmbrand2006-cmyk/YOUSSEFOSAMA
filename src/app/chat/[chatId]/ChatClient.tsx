@@ -72,10 +72,22 @@ export default function ChatClient() {
     ? currentChat?.participantNames?.[otherUid] || "Unknown"
     : "Unknown";
 
-  // Listen to messages
+  // Listen to messages with instant synchronization
   useEffect(() => {
     if (!chatId) return;
-    const unsub = listenToMessages(chatId, 50, setMessages);
+    const unsub = listenToMessages(chatId, 60, (serverMsgs) => {
+      setMessages((prev) => {
+        // Keep pending optimistic messages until confirmed by server
+        const pendingOptimistic = prev.filter(
+          (m) =>
+            m.id.startsWith("opt_") &&
+            !serverMsgs.some(
+              (sm) => sm.senderId === m.senderId && sm.text === m.text
+            )
+        );
+        return [...serverMsgs, ...pendingOptimistic];
+      });
+    });
     return () => unsub();
   }, [chatId]);
 
@@ -135,12 +147,13 @@ export default function ChatClient() {
     }, 3000);
   }, [chatId, userProfile?.uid]);
 
-  // Send text message
+  // Send text message (Optimistic 0-second instant delivery)
   const handleSend = async () => {
     if (!inputText.trim() || !userProfile || !chatId) return;
 
     const text = inputText.trim();
     setInputText("");
+    const replySnapshot = replyTo;
     setReplyTo(null);
     setTyping(chatId, userProfile.uid, false);
 
@@ -149,16 +162,44 @@ export default function ChatClient() {
     }
 
     const extra: Record<string, any> = {};
-    if (replyTo) {
+    if (replySnapshot) {
       extra.replyTo = {
-        messageId: replyTo.id,
-        text: replyTo.text,
-        senderId: replyTo.senderId,
-        senderName: replyTo.senderName,
+        messageId: replySnapshot.id,
+        text: replySnapshot.text,
+        senderId: replySnapshot.senderId,
+        senderName: replySnapshot.senderName,
       };
     }
 
-    await sendMessage(chatId, userProfile.uid, userProfile.displayName, text, extra);
+    // ⚡ Optimistic UI: Display the message immediately in the same millisecond!
+    const tempId = `opt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const optimisticMsg: Message = {
+      id: tempId,
+      senderId: userProfile.uid,
+      senderName: userProfile.displayName,
+      text,
+      type: "text",
+      reactions: {},
+      isEdited: false,
+      isDeleted: false,
+      deletedFor: [],
+      createdAt: { toDate: () => new Date() } as any,
+      ...extra,
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 10);
+
+    try {
+      await sendMessage(chatId, userProfile.uid, userProfile.displayName, text, extra);
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      // Remove optimistic message if failure occurs
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      alert("تعذر إرسال الرسالة، تأكد من الاتصال بالإنترنت.");
+    }
   };
 
   // Send image as Base64 encoded string directly into Firestore (Zero Storage)
@@ -171,6 +212,27 @@ export default function ChatClient() {
 
     try {
       const base64Code = await encodeImageToBase64(file);
+      // ⚡ Optimistic image display
+      const tempId = `opt_img_${Date.now()}`;
+      const optimisticImgMsg: Message = {
+        id: tempId,
+        senderId: userProfile.uid,
+        senderName: userProfile.displayName,
+        text: "📷 صورة",
+        type: "image",
+        mediaCode: base64Code,
+        reactions: {},
+        isEdited: false,
+        isDeleted: false,
+        deletedFor: [],
+        createdAt: { toDate: () => new Date() } as any,
+      };
+
+      setMessages((prev) => [...prev, optimisticImgMsg]);
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 10);
+
       await sendMessage(
         chatId,
         userProfile.uid,

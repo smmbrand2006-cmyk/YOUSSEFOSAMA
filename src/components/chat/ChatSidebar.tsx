@@ -11,6 +11,7 @@ import {
   acceptFriendRequest,
   rejectFriendRequest,
   openOrCreateSupportChat,
+  getOrCreateDirectChat,
 } from "@/lib/firebase/firestore";
 import { signOut } from "@/lib/firebase/auth";
 import { FriendRequest } from "@/lib/types/chat";
@@ -64,6 +65,21 @@ export default function ChatSidebar() {
       alert(err.message || "حدث خطأ أثناء فتح محادثة الدعم.");
     } finally {
       setOpeningSupport(false);
+    }
+  };
+
+  // Instant direct chat with any user (no friend request needed)
+  const handleStartDirectChat = async (targetUser: UserProfile) => {
+    if (!userProfile) return;
+    if (targetUser.userCode === "123") {
+      return handleOpenSupport();
+    }
+    try {
+      const chatId = await getOrCreateDirectChat(userProfile, targetUser);
+      setTab("chats");
+      router.push(`/chat/${chatId}`);
+    } catch (err: any) {
+      alert(err.message || "حدث خطأ أثناء فتح المحادثة المباشرة.");
     }
   };
 
@@ -507,48 +523,84 @@ export default function ChatSidebar() {
                 <div className="loading-spinner" />
               </div>
             ) : searchResults.length > 0 ? (
-              searchResults.map((user) => (
-                <div key={user.uid} className={styles.searchResultItem}>
+              searchResults.map((user) => {
+                const isSupport = user.userCode === "123";
+                return (
                   <div
-                    className="avatar"
-                    style={{
-                      background: "var(--primary-gradient)",
-                      color: "white",
-                      fontWeight: 700,
+                    key={user.uid}
+                    className={styles.searchResultItem}
+                    onClick={() => {
+                      if (isSupport) {
+                        handleOpenSupport();
+                      } else {
+                        handleStartDirectChat(user);
+                      }
                     }}
+                    style={{ cursor: "pointer" }}
                   >
-                    {getInitials(user.displayName || user.userCode)}
-                  </div>
-                  <div className={styles.searchResultInfo}>
-                    <div className={styles.searchResultName}>
-                      {user.displayName}
-                    </div>
-                    <div className={styles.searchResultCode}>
-                      #{user.userCode}
-                    </div>
-                  </div>
-                  {userProfile?.contacts?.includes(user.uid) ? (
-                    <span
-                      className={styles.searchResultBtn}
+                    <div
+                      className="avatar"
                       style={{
-                        background: "var(--bg-secondary)",
-                        color: "var(--text-secondary)",
+                        background: isSupport
+                          ? "linear-gradient(135deg, #128C7E, #25D366)"
+                          : "var(--primary-gradient)",
+                        color: "white",
+                        fontWeight: 700,
                       }}
                     >
-                      أصدقاء ✓
-                    </span>
-                  ) : sentRequests.has(user.uid) ? (
-                    <span className={styles.searchResultBtnSent}>تم الإرسال ✓</span>
-                  ) : (
-                    <button
-                      className={styles.searchResultBtn}
-                      onClick={() => handleSendRequest(user)}
-                    >
-                      إرسال طلب
-                    </button>
-                  )}
-                </div>
-              ))
+                      {isSupport ? (
+                        <Headphones size={18} />
+                      ) : (
+                        getInitials(user.displayName || user.userCode)
+                      )}
+                    </div>
+                    <div className={styles.searchResultInfo}>
+                      <div className={styles.searchResultName}>
+                        {user.displayName} {isSupport && "🎧"}
+                      </div>
+                      <div className={styles.searchResultCode}>
+                        #{user.userCode}
+                      </div>
+                    </div>
+                    {isSupport ? (
+                      <button
+                        className={styles.searchResultBtn}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenSupport();
+                        }}
+                        style={{
+                          background: "linear-gradient(135deg, #128C7E, #25D366)",
+                          color: "white",
+                          fontWeight: 700,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "6px 14px",
+                        }}
+                      >
+                        <Headphones size={14} /> محادثة الدعم فوراً
+                      </button>
+                    ) : (
+                      <button
+                        className={styles.searchResultBtn}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartDirectChat(user);
+                        }}
+                        style={{
+                          background: "var(--primary)",
+                          color: "white",
+                          fontWeight: 600,
+                          padding: "6px 14px",
+                        }}
+                      >
+                        مراسلة فورية 💬
+                      </button>
+                    )}
+                  </div>
+                );
+              })
             ) : searchQuery ? (
               <div className="empty-state">
                 <Search size={48} />

@@ -252,11 +252,11 @@ export function listenToChats(
 }
 
 /**
- * Listen to messages in a chat with pagination
+ * Listen to messages in a chat with real-time instant synchronization
  */
 export function listenToMessages(
   chatId: string,
-  messageLimit: number = 50,
+  messageLimit: number = 60,
   callback: (messages: Message[]) => void
 ) {
   const q = query(
@@ -265,19 +265,33 @@ export function listenToMessages(
     limit(messageLimit)
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const msgs: Message[] = [];
-    snapshot.forEach((d) => {
-      msgs.push({ id: d.id, ...d.data() } as Message);
-    });
-    // Reverse so oldest is first (for display)
-    msgs.reverse();
-    callback(msgs);
-  });
+  return onSnapshot(
+    q,
+    { includeMetadataChanges: true },
+    (snapshot) => {
+      const msgs: Message[] = [];
+      snapshot.forEach((d) => {
+        msgs.push({ id: d.id, ...d.data() } as Message);
+      });
+      // Sort oldest to newest for chronological chat timeline
+      msgs.sort((a, b) => {
+        const timeA =
+          (a.createdAt as any)?.toMillis?.() ||
+          (a as any).clientTimestamp ||
+          0;
+        const timeB =
+          (b.createdAt as any)?.toMillis?.() ||
+          (b as any).clientTimestamp ||
+          0;
+        return timeA - timeB;
+      });
+      callback(msgs);
+    }
+  );
 }
 
 /**
- * Send a text message
+ * Send a text or media message with sub-second instant delivery
  */
 export async function sendMessage(
   chatId: string,
@@ -286,46 +300,59 @@ export async function sendMessage(
   text: string,
   extra: Record<string, any> = {}
 ): Promise<string> {
+  const now = Date.now();
   const messageData = {
     senderId,
     senderName,
     text,
-    type: "text",
+    type: extra.type || "text",
     reactions: {},
     isEdited: false,
     isDeleted: false,
     deletedFor: [],
+    clientTimestamp: now,
     createdAt: serverTimestamp(),
     ...extra,
   };
 
-  const msgRef = await addDoc(
+  // 1. Add message doc immediately (parallelized)
+  const addMsgPromise = addDoc(
     collection(db, "chats", chatId, "messages"),
     messageData
   );
 
-  // Update last message on chat document
-  await updateDoc(doc(db, "chats", chatId), {
+  // 2. Update chat lastMessage in parallel
+  const updateChatPromise = updateDoc(doc(db, "chats", chatId), {
     lastMessage: {
       text,
       senderId,
-      type: "text",
+      type: extra.type || "text",
       createdAt: serverTimestamp(),
     },
-  });
+  }).catch((e) => console.warn("Failed to update chat lastMessage:", e));
 
-  // Increment unread count for other participants
-  const chatDoc = await getDoc(doc(db, "chats", chatId));
-  if (chatDoc.exists()) {
-    const chatData = chatDoc.data() as Chat;
-    const updates: Record<string, any> = {};
-    chatData.participants.forEach((uid) => {
-      if (uid !== senderId) {
-        updates[`unreadCount.${uid}`] = increment(1);
+  const [msgRef] = await Promise.all([addMsgPromise, updateChatPromise]);
+
+  // 3. Background non-blocking unread count increment
+  (async () => {
+    try {
+      const chatDoc = await getDoc(doc(db, "chats", chatId));
+      if (chatDoc.exists()) {
+        const chatData = chatDoc.data() as Chat;
+        const updates: Record<string, any> = {};
+        (chatData.participants || []).forEach((uid) => {
+          if (uid !== senderId) {
+            updates[`unreadCount.${uid}`] = increment(1);
+          }
+        });
+        if (Object.keys(updates).length > 0) {
+          await updateDoc(doc(db, "chats", chatId), updates);
+        }
       }
-    });
-    await updateDoc(doc(db, "chats", chatId), updates);
-  }
+    } catch (e) {
+      // background non-blocking
+    }
+  })();
 
   return msgRef.id;
 }
@@ -547,6 +574,62 @@ export async function openOrCreateSupportChat(currentUser: UserProfile): Promise
     isDeleted: false,
     deletedFor: [],
     createdAt: serverTimestamp(),
+  });
+
+  return chatRef.id;
+}
+
+/**
+ * Opens or creates a direct instant chat between two users without friend requests
+ */
+export async function getOrCreateDirectChat(
+  currentUser: UserProfile,
+  targetUser: UserProfile
+): Promise<string> {
+  // If target is support (123), use openOrCreateSupportChat
+  if (targetUser.userCode === "123") {
+    return openOrCreateSupportChat(currentUser);
+  }
+
+  // 1. Check if a direct chat already exists
+  const chatsQuery = query(
+    collection(db, "chats"),
+    where("participants", "array-contains", currentUser.uid)
+  );
+  const chatsSnap = await getDocs(chatsQuery);
+  const existingChat = chatsSnap.docs.find((d) => {
+    const chatData = d.data() as Chat;
+    return (
+      chatData.type === "direct" &&
+      chatData.participants.includes(targetUser.uid)
+    );
+  });
+
+  if (existingChat) {
+    return existingChat.id;
+  }
+
+  // 2. Create new direct chat immediately
+  const chatRef = await addDoc(collection(db, "chats"), {
+    type: "direct",
+    participants: [currentUser.uid, targetUser.uid],
+    participantNames: {
+      [currentUser.uid]: currentUser.displayName || currentUser.userCode,
+      [targetUser.uid]: targetUser.displayName || targetUser.userCode,
+    },
+    lastMessage: null,
+    lastRead: {
+      [currentUser.uid]: serverTimestamp(),
+      [targetUser.uid]: serverTimestamp(),
+    },
+    createdAt: serverTimestamp(),
+    isPinned: {},
+    isArchived: {},
+    isMuted: {},
+    unreadCount: {
+      [currentUser.uid]: 0,
+      [targetUser.uid]: 0,
+    },
   });
 
   return chatRef.id;
