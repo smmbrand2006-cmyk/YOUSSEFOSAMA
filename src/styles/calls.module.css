@@ -1,0 +1,228 @@
+.callOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-call);
+  background: #1a1a2e;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.callOverlayVideo {
+  background: #000;
+}
+
+/* Video streams */
+.remoteVideo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.localVideo {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  width: 160px;
+  height: 220px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-xl);
+  z-index: 10;
+  cursor: grab;
+}
+
+.localVideo video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+/* Audio call (no video) */
+.callInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  z-index: 5;
+}
+
+.callAvatar {
+  width: 140px;
+  height: 140px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3.5rem;
+  font-weight: 700;
+  color: white;
+  animation: ringPulse 2s infinite;
+  overflow: hidden;
+}
+
+.callAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.callName {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+}
+
+.callStatus {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.callDuration {
+  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Call controls */
+.callControls {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  z-index: 10;
+}
+
+.callControlBtn {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+.callControlBtn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+}
+
+.callControlBtnActive {
+  background: white;
+  color: #1a1a2e;
+}
+
+.callControlBtnEnd {
+  width: 64px;
+  height: 64px;
+  background: var(--error);
+}
+
+.callControlBtnEnd:hover {
+  background: #c80030;
+}
+
+/* Incoming call modal */
+.incomingCallOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-call);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xl);
+  animation: fadeIn 0.3s ease;
+}
+
+.incomingCallAvatar {
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  font-weight: 700;
+  color: white;
+  animation: ringPulse 1.5s infinite;
+  overflow: hidden;
+}
+
+.incomingCallAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.incomingCallName {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+}
+
+.incomingCallType {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.incomingCallActions {
+  display: flex;
+  gap: 48px;
+  margin-top: var(--space-xl);
+}
+
+.incomingCallBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.incomingCallBtnCircle {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  color: white;
+}
+
+.incomingCallBtnCircle:hover {
+  transform: scale(1.1);
+}
+
+.incomingCallAccept {
+  background: var(--online);
+}
+
+.incomingCallReject {
+  background: var(--error);
+}
+
+.incomingCallLabel {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
