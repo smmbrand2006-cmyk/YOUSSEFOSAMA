@@ -44,39 +44,6 @@ const BG_COLORS = [
   "#047857", // Emerald
 ];
 
-const INITIAL_STATUSES: StatusItem[] = [
-  {
-    id: "status_support",
-    userName: "الدعم الفني الرسمي (#123) 🎧",
-    userCode: "123",
-    isMine: false,
-    type: "text",
-    content: "🟢 خدمة الدعم الفني متواجدة على مدار الساعة للرد على استفساراتكم فوراً!",
-    bgColor: "#005c4b",
-    timestamp: Date.now() - 1000 * 60 * 35,
-  },
-  {
-    id: "status_youssef",
-    userName: "Eng:Youssef Mansour ✨",
-    userCode: "youssef",
-    isMine: false,
-    type: "text",
-    content: "🚀 مرحباً بكم في تطبيق يوسف شات بأعلى معايير السرعة والأمان!",
-    bgColor: "#1e3a8a",
-    timestamp: Date.now() - 1000 * 60 * 120,
-  },
-  {
-    id: "status_malak",
-    userName: "Malak Osama 🌸",
-    userCode: "malak",
-    isMine: false,
-    type: "text",
-    content: "Always look on the bright side of life ☀️✨",
-    bgColor: "#701a75",
-    timestamp: Date.now() - 1000 * 60 * 240,
-  },
-];
-
 export default function StatusPage() {
   const router = useRouter();
   const { userProfile, isAuthenticated, loading } = useAuth();
@@ -95,18 +62,30 @@ export default function StatusPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load statuses from localStorage or initial list
+  // Load statuses from localStorage (strictly real, purge all mock fake statuses)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("youssef_app_statuses");
       if (stored) {
         try {
-          setStatuses(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          const clean = Array.isArray(parsed)
+            ? parsed.filter(
+                (s: any) =>
+                  !["status_support", "status_youssef", "status_malak"].includes(s.id) &&
+                  s.userName !== "Eng:Youssef Mansour ✨" &&
+                  s.userName !== "Malak Osama 🌸" &&
+                  s.userName !== "الدعم الفني الرسمي (#123) 🎧"
+              )
+            : [];
+          setStatuses(clean);
+          localStorage.setItem("youssef_app_statuses", JSON.stringify(clean));
         } catch {
-          setStatuses(INITIAL_STATUSES);
+          setStatuses([]);
+          localStorage.removeItem("youssef_app_statuses");
         }
       } else {
-        setStatuses(INITIAL_STATUSES);
+        setStatuses([]);
       }
     }
   }, []);
@@ -613,27 +592,39 @@ export default function StatusPage() {
             </div>
 
             {/* Stories List */}
-            {otherStatuses.map((item) => {
-              const globalIdx = statuses.findIndex((s) => s.id === item.id);
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => setActiveStoryIndex(globalIdx >= 0 ? globalIdx : 0)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "12px 20px",
-                    gap: "16px",
-                    cursor: "pointer",
-                    transition: "background 0.15s ease",
-                  }}
-                  onMouseEnter={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = "#182229")
-                  }
-                  onMouseLeave={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = "transparent")
-                  }
-                >
+            {otherStatuses.length === 0 ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "36px 20px",
+                  color: "#8696a0",
+                  fontSize: "0.9rem",
+                }}
+              >
+                لا توجد حالات حديثة من جهات اتصالك حالياً
+              </div>
+            ) : (
+              otherStatuses.map((item) => {
+                const globalIdx = statuses.findIndex((s) => s.id === item.id);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setActiveStoryIndex(globalIdx >= 0 ? globalIdx : 0)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "12px 20px",
+                      gap: "16px",
+                      cursor: "pointer",
+                      transition: "background 0.15s ease",
+                    }}
+                    onMouseEnter={(e) =>
+                      ((e.currentTarget as HTMLElement).style.background = "#182229")
+                    }
+                    onMouseLeave={(e) =>
+                      ((e.currentTarget as HTMLElement).style.background = "transparent")
+                    }
+                  >
                   <div
                     style={{
                       width: "52px",
@@ -686,8 +677,9 @@ export default function StatusPage() {
                   </div>
                 </div>
               );
-            })}
-          </div>
+            })
+          )}
+        </div>
 
           {/* Floating Buttons: Pencil for text & Camera for photo */}
           <div

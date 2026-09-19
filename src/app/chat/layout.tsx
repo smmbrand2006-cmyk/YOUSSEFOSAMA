@@ -90,9 +90,6 @@ export default function ChatLayout({
           onOpenCalls={() => {
             router.push("/calls");
           }}
-          onOpenCommunities={() => {
-            setMobileTab("communities");
-          }}
           onOpenStatus={() => {
             router.push("/status");
           }}

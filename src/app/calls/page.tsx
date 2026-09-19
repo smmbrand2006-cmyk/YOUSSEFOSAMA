@@ -38,77 +38,6 @@ interface CallLogItem {
   uid?: string;
 }
 
-const INITIAL_CALLS: CallLogItem[] = [
-  {
-    id: "call_1",
-    name: "الواقفين عن العمل ☝️💸",
-    userCode: "team",
-    direction: "missed",
-    type: "audio",
-    timestamp: "September 17, 20:49",
-    count: 2,
-  },
-  {
-    id: "call_2",
-    name: "Malak Osama",
-    userCode: "malak",
-    direction: "missed",
-    type: "audio",
-    timestamp: "September 17, 12:36",
-    count: 2,
-  },
-  {
-    id: "call_3",
-    name: "Zeyad Samey",
-    userCode: "zeyad",
-    direction: "outgoing",
-    type: "audio",
-    timestamp: "September 16, 18:36",
-  },
-  {
-    id: "call_4",
-    name: "RO7Y💍🤍",
-    userCode: "ro7y",
-    direction: "missed",
-    type: "audio",
-    timestamp: "September 16, 15:51",
-  },
-  {
-    id: "call_5",
-    name: "Malak Osama",
-    userCode: "malak",
-    direction: "missed",
-    type: "audio",
-    timestamp: "September 16, 14:53",
-    count: 2,
-  },
-  {
-    id: "call_6",
-    name: "Ahmed Ezz",
-    userCode: "ezz",
-    direction: "outgoing",
-    type: "audio",
-    timestamp: "September 8, 21:46",
-  },
-  {
-    id: "call_7",
-    name: "Mostafa Maged ✨🚶",
-    userCode: "mostafa",
-    direction: "missed",
-    type: "audio",
-    timestamp: "September 6, 20:14",
-    count: 2,
-  },
-  {
-    id: "call_8",
-    name: "الدعم الفني الرسمي (123) 🎧",
-    userCode: "123",
-    direction: "incoming",
-    type: "audio",
-    timestamp: "September 1, 10:00",
-  },
-];
-
 export default function CallsPage() {
   const router = useRouter();
   const { userProfile, isAuthenticated, loading } = useAuth();
@@ -124,18 +53,40 @@ export default function CallsPage() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  // Load from localStorage or initial list
+  // Load from localStorage (strictly real calls, purge all mock fake data)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("youssef_app_calls");
       if (stored) {
         try {
-          setCalls(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          const clean = Array.isArray(parsed)
+            ? parsed.filter(
+                (c: any) =>
+                  !c.id.startsWith("call_1") &&
+                  !c.id.startsWith("call_2") &&
+                  !c.id.startsWith("call_3") &&
+                  !c.id.startsWith("call_4") &&
+                  !c.id.startsWith("call_5") &&
+                  !c.id.startsWith("call_6") &&
+                  !c.id.startsWith("call_7") &&
+                  !c.id.startsWith("call_8") &&
+                  c.name !== "الواقفين عن العمل ☝️💸" &&
+                  c.name !== "Malak Osama" &&
+                  c.name !== "Zeyad Samey" &&
+                  c.name !== "RO7Y💍🤍" &&
+                  c.name !== "Ahmed Ezz" &&
+                  c.name !== "Mostafa Maged ✨🚶"
+              )
+            : [];
+          setCalls(clean);
+          localStorage.setItem("youssef_app_calls", JSON.stringify(clean));
         } catch {
-          setCalls(INITIAL_CALLS);
+          setCalls([]);
+          localStorage.removeItem("youssef_app_calls");
         }
       } else {
-        setCalls(INITIAL_CALLS);
+        setCalls([]);
       }
     }
   }, []);

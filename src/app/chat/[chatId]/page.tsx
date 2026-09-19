@@ -1,9 +1,9 @@
-import ClientRedirect from "./ClientRedirect";
+import ChatClient from "./ChatClient";
 
 export function generateStaticParams() {
   return [{ chatId: "direct" }];
 }
 
 export default function ChatPage() {
-  return <ClientRedirect />;
+  return <ChatClient />;
 }

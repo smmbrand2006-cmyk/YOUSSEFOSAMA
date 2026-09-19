@@ -9,7 +9,8 @@ import {
   limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
-import { getOrCreateDirectChat } from "@/lib/firebase/firestore";
+import { getOrCreateDirectChat, getChatDoc } from "@/lib/firebase/firestore";
+import { useChats } from "@/lib/contexts/ChatContext";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -37,6 +38,7 @@ export default function SelectContactModal({
   onOpenCreateGroup,
 }: SelectContactModalProps) {
   const router = useRouter();
+  const { setActiveChat } = useChats();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -99,8 +101,22 @@ export default function SelectContactModal({
     setOpeningChat(targetUser.uid);
     try {
       const chatId = await getOrCreateDirectChat(currentUser, targetUser);
+      const chatDoc = await getChatDoc(chatId);
+      if (chatDoc) {
+        setActiveChat(chatDoc);
+      } else {
+        setActiveChat({
+          id: chatId,
+          type: "direct",
+          participants: [currentUser.uid, targetUser.uid],
+          participantNames: {
+            [currentUser.uid]: currentUser.displayName || currentUser.userCode,
+            [targetUser.uid]: targetUser.displayName || targetUser.userCode,
+          },
+        } as any);
+      }
       onClose();
-      router.push(`/chat/${chatId}`);
+      router.push("/chat");
     } catch (err) {
       console.error("Failed to open chat with user:", err);
       alert("تعذر فتح المحادثة، يرجى المحاولة مرة أخرى.");
@@ -114,8 +130,21 @@ export default function SelectContactModal({
     setOpeningChat(currentUser.uid);
     try {
       const chatId = await getOrCreateDirectChat(currentUser, currentUser);
+      const chatDoc = await getChatDoc(chatId);
+      if (chatDoc) {
+        setActiveChat(chatDoc);
+      } else {
+        setActiveChat({
+          id: chatId,
+          type: "direct",
+          participants: [currentUser.uid, currentUser.uid],
+          participantNames: {
+            [currentUser.uid]: currentUser.displayName || currentUser.userCode,
+          },
+        } as any);
+      }
       onClose();
-      router.push(`/chat/${chatId}`);
+      router.push("/chat");
     } catch (err) {
       console.error("Failed to open self chat:", err);
       alert("تعذر فتح الملاحظات، يرجى المحاولة مرة أخرى.");
@@ -477,52 +506,6 @@ export default function SelectContactModal({
               </span>
             </div>
             <QrCode size={20} color="#8696a0" />
-          </div>
-
-          {/* Action Row 3: New community */}
-          <div
-            onClick={() => {
-              alert("المجتمعات: يمكنك ربط المجموعات ذات الاهتمامات المشتركة معاً!");
-            }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              padding: "12px 18px",
-              gap: "16px",
-              cursor: "pointer",
-              transition: "background 0.15s ease",
-            }}
-            onMouseEnter={(e) =>
-              ((e.currentTarget as HTMLElement).style.background = "#182229")
-            }
-            onMouseLeave={(e) =>
-              ((e.currentTarget as HTMLElement).style.background = "transparent")
-            }
-          >
-            <div
-              style={{
-                width: "44px",
-                height: "44px",
-                borderRadius: "50%",
-                background: "#00a884",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#111b21",
-                flexShrink: 0,
-              }}
-            >
-              <Globe size={22} strokeWidth={2.5} />
-            </div>
-            <span
-              style={{
-                color: "#e9edef",
-                fontSize: "0.98rem",
-                fontWeight: "500",
-              }}
-            >
-              New community
-            </span>
           </div>
 
           {/* Section Header: Contacts on WhatsApp */}

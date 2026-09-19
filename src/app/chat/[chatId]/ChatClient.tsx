@@ -35,6 +35,7 @@ import {
   Phone,
   Video,
   MoreVertical,
+  Search,
   Send,
   Paperclip,
   Image as ImageIcon,
@@ -175,6 +176,15 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
       markChatAsRead(chatId, userProfile.uid);
     }
   }, [chatId, userProfile?.uid, messages.length]);
+
+  // Close 3-dots top menu on click outside
+  useEffect(() => {
+    const handleGlobalClick = () => setShowTopMenu(false);
+    if (showTopMenu) {
+      window.addEventListener("click", handleGlobalClick);
+    }
+    return () => window.removeEventListener("click", handleGlobalClick);
+  }, [showTopMenu]);
 
   const otherUid = currentChat?.participants?.find(
     (id) => id !== userProfile?.uid
@@ -679,9 +689,7 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
               onClick={() => handleStartCall("video")}
               title="مكالمة فيديو"
             >
-              <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
-                videocam
-              </span>
+              <Video size={20} />
             </button>
 
             <button
@@ -691,9 +699,7 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
               onClick={() => handleStartCall("audio")}
               title="مكالمة صوتية"
             >
-              <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
-                call
-              </span>
+              <Phone size={19} />
             </button>
 
             <div className={styles.chatTopDivider} />
@@ -712,16 +718,14 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
               }}
               title="بحث في المحادثة"
             >
-              <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
-                {showInChatSearch ? "close" : "search"}
-              </span>
+              {showInChatSearch ? <X size={20} /> : <Search size={20} />}
             </button>
 
             {/* 3-Dots Menu with Rich Options */}
             <div style={{ position: "relative" }}>
               <button
                 type="button"
-                aria-label="More"
+                aria-label="خيارات المحادثة"
                 className={`${styles.chatTopActionBtn} ${showTopMenu ? styles.activeChatTopActionBtn : ""}`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -729,14 +733,19 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                 }}
                 title="خيارات المحادثة"
               >
-                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
-                  more_vert
-                </span>
+                <MoreVertical size={20} />
               </button>
 
               {showTopMenu && (
                 <div
                   className={styles.chatHeaderDropdown}
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    right: 0,
+                    minWidth: "240px",
+                    zIndex: 1000,
+                  }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button

@@ -10,14 +10,6 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading) {
-      // If user is already on any sub-route (e.g. /auth/register, /auth/login, /chat, /profile), do not hijack!
-      if (typeof window !== "undefined") {
-        const path = window.location.pathname;
-        if (path && path !== "/" && path !== "/index.html") {
-          return;
-        }
-      }
-
       if (isAuthenticated) {
         router.replace("/chat");
       } else {

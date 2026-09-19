@@ -7,7 +7,7 @@ import { useChats } from "@/lib/contexts/ChatContext";
 import styles from "@/styles/chat.module.css";
 
 interface AppNavRailProps {
-  onSelectTab?: (tab: "chats" | "calls" | "communities" | "status" | "settings") => void;
+  onSelectTab?: (tab: "chats" | "calls" | "status" | "settings") => void;
   activeTab?: string;
   onOpenProfile?: () => void;
 }
@@ -24,7 +24,7 @@ export default function AppNavRail({
 
   const [currentTab, setCurrentTab] = useState<string>(activeTab);
 
-  const handleTabClick = (tab: "chats" | "calls" | "communities" | "status" | "settings") => {
+  const handleTabClick = (tab: "chats" | "calls" | "status" | "settings") => {
     setCurrentTab(tab);
     if (onSelectTab) {
       onSelectTab(tab);
@@ -84,21 +84,6 @@ export default function AppNavRail({
           >
             <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
               call
-            </span>
-          </button>
-
-          {/* Communities / Groups */}
-          <button
-            type="button"
-            aria-label="Communities"
-            className={`${styles.navRailItem} ${
-              currentTab === "communities" ? styles.navRailItemActive : ""
-            }`}
-            onClick={() => handleTabClick("communities")}
-            title="المجموعات (Communities)"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
-              groups
             </span>
           </button>
 

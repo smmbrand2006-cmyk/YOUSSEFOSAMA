@@ -9,7 +9,6 @@ interface MobileBottomNavProps {
   onTabChange?: (tab: string) => void;
   onOpenSettings?: () => void;
   onOpenCalls?: () => void;
-  onOpenCommunities?: () => void;
   onOpenStatus?: () => void;
 }
 
@@ -18,7 +17,6 @@ export default function MobileBottomNav({
   onTabChange,
   onOpenSettings,
   onOpenCalls,
-  onOpenCommunities,
   onOpenStatus,
 }: MobileBottomNavProps) {
   const router = useRouter();
@@ -35,12 +33,6 @@ export default function MobileBottomNav({
       label: "Updates",
       icon: "motion_photos_on",
       action: onOpenStatus || (() => (onTabChange ? onTabChange("status") : router.push("/status"))),
-    },
-    {
-      id: "communities",
-      label: "Communities",
-      icon: "groups",
-      action: onOpenCommunities || (() => onTabChange?.("communities")),
     },
     {
       id: "calls",
