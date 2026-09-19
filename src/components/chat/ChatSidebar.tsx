@@ -11,12 +11,14 @@ import {
   getChatDoc,
   blockUser,
   unblockUser,
+  markChatAsRead,
 } from "@/lib/firebase/firestore";
 import { signOut } from "@/lib/firebase/auth";
 import { UserProfile } from "@/lib/types/user";
 import { formatMessageTime } from "@/lib/utils/formatDate";
 import UserProfileModal from "./UserProfileModal";
 import CreateGroupModal from "./CreateGroupModal";
+import SelectContactModal from "./SelectContactModal";
 import styles from "@/styles/chat.module.css";
 
 type FilterType = "all" | "unread" | "groups" | "favorites";
@@ -32,6 +34,7 @@ export default function ChatSidebar() {
   const [searching, setSearching] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showFabMenu, setShowFabMenu] = useState(false);
+  const [showSelectContact, setShowSelectContact] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [openingSupport, setOpeningSupport] = useState(false);
   const [selectedProfileUser, setSelectedProfileUser] = useState<UserProfile | null>(null);
@@ -54,7 +57,7 @@ export default function ChatSidebar() {
             displayName: c.participantNames?.[otherUid] || "مستخدم",
             userCode: "",
             isOnline: false,
-          });
+          } as any as UserProfile);
         }
       }
     });
@@ -152,6 +155,24 @@ export default function ChatSidebar() {
       console.error("Search failed:", err);
     } finally {
       setSearching(false);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    if (!userProfile) return;
+    setShowMenu(false);
+    try {
+      const unreadChats = chats.filter((c) => (c.unreadCount?.[userProfile.uid] || 0) > 0);
+      if (unreadChats.length === 0) {
+        alert("جميع المحادثات مقروءة بالفعل! 👍");
+        return;
+      }
+      await Promise.all(
+        unreadChats.map((c) => markChatAsRead(c.id, userProfile.uid))
+      );
+      alert("تم تعيين جميع المحادثات كمقروءة بنجاح! ✅");
+    } catch (err) {
+      console.error("Failed to mark all as read:", err);
     }
   };
 
@@ -302,7 +323,7 @@ export default function ChatSidebar() {
               {showMenu && (
                 <div
                   className="dropdown"
-                  style={{ right: 0, top: "100%", marginTop: 6 }}
+                  style={{ right: 0, top: "100%", marginTop: 6, minWidth: "230px" }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div
@@ -320,21 +341,100 @@ export default function ChatSidebar() {
                     </span>
                     إنشاء مجموعة جديدة
                   </div>
+
                   <div
                     className="dropdown-item"
                     onClick={() => {
                       setShowMenu(false);
-                      mobileSearchInputRef.current?.focus();
+                      setShowSelectContact(true);
                     }}
                   >
                     <span
                       className="material-symbols-outlined"
                       style={{ fontSize: "18px", color: "#60a5fa" }}
                     >
-                      person_search
+                      person_add
                     </span>
-                    محادثة مباشرة جديدة (بحث)
+                    جهة اتصال جديدة (New contact)
                   </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      alert("رسالة جماعية جديدة: يمكنك إرسال رسالة واحدة لعدة أصدقاء ومجموعات 📢");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#38bdf8" }}
+                    >
+                      campaign
+                    </span>
+                    رسالة جماعية جديدة (New broadcast)
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      alert("الأجهزة المرتبطة: لا توجد أجهزة متصلة أخرى بحسابك حالياً 💻");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#a78bfa" }}
+                    >
+                      devices
+                    </span>
+                    الأجهزة المرتبطة (Linked devices)
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      alert("الرسائل المميزة بنجمة: لا توجد رسائل مميزة حتى الآن ⭐");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#facc15" }}
+                    >
+                      star
+                    </span>
+                    الرسائل المميزة بنجمة
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      alert("المدفوعات الآمنة: خدمة التحويلات المالية قيد التفعيل 💳");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#34d399" }}
+                    >
+                      payments
+                    </span>
+                    المدفوعات (Payments)
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={handleMarkAllAsRead}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#38bdf8" }}
+                    >
+                      done_all
+                    </span>
+                    تحديد الكل كمقروء
+                  </div>
+
                   <div className="dropdown-item" onClick={handleOpenSupport}>
                     <span
                       className="material-symbols-outlined"
@@ -342,11 +442,34 @@ export default function ChatSidebar() {
                     >
                       support_agent
                     </span>
-                    الدعم الفني (123)
+                    الدعم الفني الرسمي (123)
                   </div>
+
+                  <div className="dropdown-divider" />
+
+                  {/* Settings Item in 3-Dots */}
                   <div
                     className="dropdown-item"
-                    onClick={() => setShowMyProfileModal(true)}
+                    onClick={() => {
+                      setShowMenu(false);
+                      router.push("/profile");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "var(--primary)" }}
+                    >
+                      settings
+                    </span>
+                    الإعدادات (Settings) ⚙️
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowMyProfileModal(true);
+                    }}
                   >
                     <span
                       className="material-symbols-outlined"
@@ -356,7 +479,9 @@ export default function ChatSidebar() {
                     </span>
                     الملف الشخصي
                   </div>
+
                   <div className="dropdown-divider" />
+
                   <div
                     className="dropdown-item dropdown-item-danger"
                     onClick={handleSignOut}
@@ -536,7 +661,7 @@ export default function ChatSidebar() {
               {showMenu && (
                 <div
                   className="dropdown"
-                  style={{ right: 0, top: "100%", marginTop: 6 }}
+                  style={{ right: 0, top: "100%", marginTop: 6, minWidth: "230px" }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div
@@ -554,22 +679,100 @@ export default function ChatSidebar() {
                     </span>
                     إنشاء مجموعة جديدة
                   </div>
+
                   <div
                     className="dropdown-item"
                     onClick={() => {
                       setShowMenu(false);
-                      const inp = document.getElementById("chat-search-input");
-                      inp?.focus();
+                      setShowSelectContact(true);
                     }}
                   >
                     <span
                       className="material-symbols-outlined"
                       style={{ fontSize: "18px", color: "#60a5fa" }}
                     >
-                      person_search
+                      person_add
                     </span>
-                    محادثة مباشرة جديدة (بحث)
+                    جهة اتصال جديدة (New contact)
                   </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      alert("رسالة جماعية جديدة: يمكنك إرسال رسالة واحدة لعدة أصدقاء ومجموعات 📢");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#38bdf8" }}
+                    >
+                      campaign
+                    </span>
+                    رسالة جماعية جديدة (New broadcast)
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      alert("الأجهزة المرتبطة: لا توجد أجهزة متصلة أخرى بحسابك حالياً 💻");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#a78bfa" }}
+                    >
+                      devices
+                    </span>
+                    الأجهزة المرتبطة (Linked devices)
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      alert("الرسائل المميزة بنجمة: لا توجد رسائل مميزة حتى الآن ⭐");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#facc15" }}
+                    >
+                      star
+                    </span>
+                    الرسائل المميزة بنجمة
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      alert("المدفوعات الآمنة: خدمة التحويلات المالية قيد التفعيل 💳");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#34d399" }}
+                    >
+                      payments
+                    </span>
+                    المدفوعات (Payments)
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={handleMarkAllAsRead}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#38bdf8" }}
+                    >
+                      done_all
+                    </span>
+                    تحديد الكل كمقروء
+                  </div>
+
                   <div className="dropdown-item" onClick={handleOpenSupport}>
                     <span
                       className="material-symbols-outlined"
@@ -577,11 +780,34 @@ export default function ChatSidebar() {
                     >
                       support_agent
                     </span>
-                    الدعم الفني (123)
+                    الدعم الفني الرسمي (123)
                   </div>
+
+                  <div className="dropdown-divider" />
+
+                  {/* Settings Item in 3-Dots */}
                   <div
                     className="dropdown-item"
-                    onClick={() => setShowMyProfileModal(true)}
+                    onClick={() => {
+                      setShowMenu(false);
+                      router.push("/profile");
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "var(--primary)" }}
+                    >
+                      settings
+                    </span>
+                    الإعدادات (Settings) ⚙️
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowMyProfileModal(true);
+                    }}
                   >
                     <span
                       className="material-symbols-outlined"
@@ -591,7 +817,9 @@ export default function ChatSidebar() {
                     </span>
                     الملف الشخصي
                   </div>
+
                   <div className="dropdown-divider" />
+
                   <div
                     className="dropdown-item dropdown-item-danger"
                     onClick={handleSignOut}
@@ -1056,13 +1284,13 @@ export default function ChatSidebar() {
       {/* Floating Action Button (FAB) */}
       <button
         type="button"
-        aria-label="Start new conversation or group"
+        aria-label="Start new conversation or contact"
         className={styles.mobileFab}
-        onClick={() => setShowFabMenu(!showFabMenu)}
-        title="بدء محادثة جديدة أو إنشاء مجموعة أو التواصل مع الدعم"
+        onClick={() => setShowSelectContact(true)}
+        title="تحديد جهة اتصال / محادثة جديدة"
       >
         <span className="material-symbols-outlined" style={{ fontSize: "26px" }}>
-          {showFabMenu ? "close" : "chat"}
+          chat
         </span>
       </button>
 
@@ -1074,6 +1302,14 @@ export default function ChatSidebar() {
         capture="environment"
         style={{ display: "none" }}
         onChange={handleCameraFileChange}
+      />
+
+      {/* WhatsApp-Style Select Contact Screen */}
+      <SelectContactModal
+        isOpen={showSelectContact}
+        onClose={() => setShowSelectContact(false)}
+        currentUser={userProfile}
+        onOpenCreateGroup={() => setShowCreateGroupModal(true)}
       />
 
       {/* Create Group Modal */}

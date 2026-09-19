@@ -587,6 +587,130 @@
   margin: 0 4px;
 }
 
+/* Message Selection Bar */
+.selectionTopBar {
+  height: 64px;
+  padding: 0 20px;
+  background: var(--surface-container);
+  border-bottom: 1px solid var(--on-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 15;
+  flex-shrink: 0;
+  animation: fadeIn 0.2s ease;
+}
+
+.selectionActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--on-surface);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.selectionActionBtn:hover:not(:disabled) {
+  background: var(--surface-container-high);
+}
+
+.selectionActionBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.selectionDeleteEveryoneBtn {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.selectionDeleteEveryoneBtn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.28);
+  color: #ef4444;
+}
+
+.selectionBtnText {
+  display: inline;
+}
+
+@media (max-width: 640px) {
+  .selectionBtnText {
+    display: none;
+  }
+}
+
+/* Chat Header Dropdown Menu */
+.chatHeaderDropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 240px;
+  background: var(--surface-container-high);
+  border: 1px solid var(--on-secondary);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  padding: 6px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.chatDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--on-surface);
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-align: right;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.chatDropdownItem:hover {
+  background: var(--surface-container-highest);
+}
+
+.chatDropdownDanger {
+  color: #f87171;
+}
+
+.chatDropdownDanger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.chatDropdownDivider {
+  height: 1px;
+  background: var(--on-secondary);
+  margin: 4px 6px;
+}
+
+/* Message row selecting state */
+.msgRowSelecting {
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background 0.15s ease;
+  padding: 2px 4px;
+}
+
+.msgRowSelected {
+  background: rgba(0, 168, 132, 0.15) !important;
+}
+
 /* Chat Canvas & Pattern */
 .chatCanvas {
   flex: 1;

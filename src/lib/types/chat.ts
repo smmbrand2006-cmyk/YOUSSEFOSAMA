@@ -19,6 +19,11 @@ export interface Chat {
   isArchived: Record<string, boolean>;
   isMuted: Record<string, boolean>;
   unreadCount: Record<string, number>;
+  isSupport?: boolean;
+  isOnline?: boolean;
+  name?: string;
+  groupAdmin?: string;
+  updatedAt?: Timestamp;
   // Group-specific
   groupName?: string;
   groupAdmins?: string[];

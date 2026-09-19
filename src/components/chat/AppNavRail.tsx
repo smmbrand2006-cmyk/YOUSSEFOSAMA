@@ -29,7 +29,13 @@ export default function AppNavRail({
     if (onSelectTab) {
       onSelectTab(tab);
     }
-    if (tab === "settings") {
+    if (tab === "chats") {
+      router.push("/chat");
+    } else if (tab === "calls") {
+      router.push("/calls");
+    } else if (tab === "status") {
+      router.push("/status");
+    } else if (tab === "settings") {
       router.push("/profile");
     }
   };

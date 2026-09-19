@@ -4,6 +4,7 @@ export interface UserProfile {
   uid: string;
   userCode: string;
   displayName: string;
+  email?: string;
   bio: string;
   createdAt: Timestamp;
   lastSeen: Timestamp;

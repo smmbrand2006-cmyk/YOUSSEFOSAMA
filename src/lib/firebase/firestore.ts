@@ -6,6 +6,8 @@ import {
   getDoc,
   getDocs,
   updateDoc,
+  deleteDoc,
+  writeBatch,
   query,
   where,
   orderBy,
@@ -226,7 +228,7 @@ export function listenToFriendRequests(
       snapshot.forEach((d) => {
         const data = d.data() as FriendRequest;
         if (data.status === "pending") {
-          requests.push({ id: d.id, ...data });
+          requests.push({ ...data, id: d.id });
         }
       });
       // Sort client-side
@@ -322,8 +324,8 @@ export function listenToMessages(
           };
         }
         msgs.push({
-          id: d.id,
           ...raw,
+          id: d.id,
           text: decryptedText,
           replyTo: decryptedReplyTo,
         } as Message);
@@ -449,13 +451,96 @@ export async function deleteMessage(
   if (forEveryone) {
     await updateDoc(doc(db, "chats", chatId, "messages", messageId), {
       isDeleted: true,
-      text: "This message was deleted",
+      text: "تم حذف هذه الرسالة",
     });
   } else {
     await updateDoc(doc(db, "chats", chatId, "messages", messageId), {
       deletedFor: arrayUnion(uid),
     });
   }
+}
+
+/**
+ * Delete multiple selected messages (for everyone or for current user)
+ */
+export async function deleteMultipleMessages(
+  chatId: string,
+  messageIds: string[],
+  uid: string,
+  forEveryone: boolean = false
+): Promise<void> {
+  if (!messageIds || messageIds.length === 0) return;
+
+  const batch = writeBatch(db);
+  messageIds.forEach((msgId) => {
+    const msgRef = doc(db, "chats", chatId, "messages", msgId);
+    if (forEveryone) {
+      batch.update(msgRef, {
+        isDeleted: true,
+        text: "تم حذف هذه الرسالة",
+        deletedAt: serverTimestamp(),
+      });
+    } else {
+      batch.update(msgRef, {
+        deletedFor: arrayUnion(uid),
+      });
+    }
+  });
+
+  await batch.commit();
+}
+
+/**
+ * Clear an entire chat conversation for everyone (wiping all messages completely)
+ */
+export async function clearChatForEveryone(chatId: string): Promise<void> {
+  const msgsQuery = query(collection(db, "chats", chatId, "messages"));
+  const snap = await getDocs(msgsQuery);
+
+  if (!snap.empty) {
+    const docs = snap.docs;
+    for (let i = 0; i < docs.length; i += 450) {
+      const batch = writeBatch(db);
+      const chunk = docs.slice(i, i + 450);
+      chunk.forEach((d) => {
+        batch.delete(d.ref);
+      });
+      await batch.commit();
+    }
+  }
+
+  // Reset chat lastMessage
+  await updateDoc(doc(db, "chats", chatId), {
+    lastMessage: null,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Clear chat for current user only (mark messages deleted for this user)
+ */
+export async function clearChatForMe(chatId: string, uid: string): Promise<void> {
+  const msgsQuery = query(collection(db, "chats", chatId, "messages"));
+  const snap = await getDocs(msgsQuery);
+
+  if (!snap.empty) {
+    const docs = snap.docs;
+    for (let i = 0; i < docs.length; i += 450) {
+      const batch = writeBatch(db);
+      const chunk = docs.slice(i, i + 450);
+      chunk.forEach((d) => {
+        batch.update(d.ref, {
+          deletedFor: arrayUnion(uid),
+        });
+      });
+      await batch.commit();
+    }
+  }
+
+  // Reset unread count for current user
+  await updateDoc(doc(db, "chats", chatId), {
+    [`unreadCount.${uid}`]: 0,
+  });
 }
 
 /**
@@ -742,7 +827,7 @@ export async function createGroupChat(
     }`
   );
 
-  const groupData: Partial<Chat> = {
+  const groupData: any = {
     type: "group",
     groupName: groupName.trim(),
     groupDescription: groupBio?.trim() || "",

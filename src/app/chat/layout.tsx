@@ -55,7 +55,9 @@ export default function ChatLayout({
         onOpenProfile={() => setShowMyProfile(true)}
         onSelectTab={(tab) => {
           if (tab === "status") {
-            setShowStatusModal(true);
+            router.push("/status");
+          } else if (tab === "calls") {
+            router.push("/calls");
           }
         }}
       />
@@ -79,16 +81,20 @@ export default function ChatLayout({
       {!activeChat && (
         <MobileBottomNav
           activeTab={mobileTab}
-          onTabChange={(tab) => setMobileTab(tab)}
+          onTabChange={(tab) => {
+            setMobileTab(tab);
+            if (tab === "calls") router.push("/calls");
+            if (tab === "status") router.push("/status");
+          }}
           onOpenSettings={() => setShowMyProfile(true)}
           onOpenCalls={() => {
-            alert("سجل المكالمات: لا توجد مكالمات فائتة حتى الآن.");
+            router.push("/calls");
           }}
           onOpenCommunities={() => {
             setMobileTab("communities");
           }}
           onOpenStatus={() => {
-            setShowStatusModal(true);
+            router.push("/status");
           }}
         />
       )}

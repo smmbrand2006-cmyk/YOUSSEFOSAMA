@@ -19,6 +19,9 @@ export interface Message {
   isEdited: boolean;
   isDeleted: boolean;
   deletedFor: string[];
+  readBy?: Record<string, any> | string[];
+  clientTimestamp?: number;
   createdAt: Timestamp;
   editedAt?: Timestamp;
+  deletedAt?: Timestamp;
 }

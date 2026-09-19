@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import styles from "@/styles/chat.module.css";
 
 interface MobileBottomNavProps {
@@ -20,18 +21,20 @@ export default function MobileBottomNav({
   onOpenCommunities,
   onOpenStatus,
 }: MobileBottomNavProps) {
+  const router = useRouter();
+
   const tabs = [
     {
       id: "chats",
       label: "Chats",
       icon: "chat",
-      action: () => onTabChange?.("chats"),
+      action: () => (onTabChange ? onTabChange("chats") : router.push("/chat")),
     },
     {
-      id: "calls",
-      label: "Calls",
-      icon: "call",
-      action: onOpenCalls || (() => onTabChange?.("calls")),
+      id: "status",
+      label: "Updates",
+      icon: "motion_photos_on",
+      action: onOpenStatus || (() => (onTabChange ? onTabChange("status") : router.push("/status"))),
     },
     {
       id: "communities",
@@ -40,16 +43,10 @@ export default function MobileBottomNav({
       action: onOpenCommunities || (() => onTabChange?.("communities")),
     },
     {
-      id: "status",
-      label: "Status",
-      icon: "motion_photos_on",
-      action: onOpenStatus || (() => onTabChange?.("status")),
-    },
-    {
-      id: "settings",
-      label: "Settings",
-      icon: "settings",
-      action: onOpenSettings || (() => onTabChange?.("settings")),
+      id: "calls",
+      label: "Calls",
+      icon: "call",
+      action: onOpenCalls || (() => (onTabChange ? onTabChange("calls") : router.push("/calls"))),
     },
   ];
 
