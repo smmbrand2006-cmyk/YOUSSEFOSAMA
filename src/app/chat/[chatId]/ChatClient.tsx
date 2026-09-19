@@ -1,0 +1,634 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useAuth } from "@/lib/contexts/AuthContext";
+import { useChats } from "@/lib/contexts/ChatContext";
+import { useCall } from "@/lib/contexts/CallContext";
+import {
+  listenToMessages,
+  sendMessage,
+  markChatAsRead,
+  deleteMessage,
+  addReaction,
+} from "@/lib/firebase/firestore";
+import {
+  setTyping,
+  listenToTyping,
+  listenToPresence,
+} from "@/lib/firebase/realtime";
+import { encodeImageToBase64 } from "@/lib/utils/imageEncoder";
+import { Message } from "@/lib/types/message";
+import { formatMessageTime, formatLastSeen } from "@/lib/utils/formatDate";
+import {
+  ArrowLeft,
+  Phone,
+  Video,
+  MoreVertical,
+  Send,
+  Paperclip,
+  Image as ImageIcon,
+  X,
+  CheckCheck,
+  Reply,
+  Trash2,
+  Copy,
+} from "lucide-react";
+import styles from "@/styles/chat.module.css";
+
+export default function ChatClient() {
+  const params = useParams();
+  const router = useRouter();
+  const chatId = params.chatId as string;
+  const { userProfile } = useAuth();
+  const { chats, setActiveChat } = useChats();
+  const { initiateCall } = useCall();
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [otherOnline, setOtherOnline] = useState(false);
+  const [otherLastSeen, setOtherLastSeen] = useState<number | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [showAttach, setShowAttach] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    message: Message;
+  } | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Find current chat
+  const currentChat = chats.find((c) => c.id === chatId);
+  const otherUid = currentChat?.participants.find(
+    (id) => id !== userProfile?.uid
+  );
+  const otherName = otherUid
+    ? currentChat?.participantNames?.[otherUid] || "Unknown"
+    : "Unknown";
+
+  // Listen to messages
+  useEffect(() => {
+    if (!chatId) return;
+    const unsub = listenToMessages(chatId, 50, setMessages);
+    return () => unsub();
+  }, [chatId]);
+
+  // Mark as read
+  useEffect(() => {
+    if (chatId && userProfile) {
+      markChatAsRead(chatId, userProfile.uid);
+    }
+  }, [chatId, userProfile?.uid, messages.length]);
+
+  // Set active chat
+  useEffect(() => {
+    if (currentChat) setActiveChat(currentChat);
+    return () => setActiveChat(null);
+  }, [currentChat?.id]);
+
+  // Listen to typing
+  useEffect(() => {
+    if (!chatId || !userProfile) return;
+    const unsub = listenToTyping(chatId, userProfile.uid, setTypingUsers);
+    return () => unsub();
+  }, [chatId, userProfile?.uid]);
+
+  // Listen to other user's presence
+  useEffect(() => {
+    if (!otherUid) return;
+    const unsub = listenToPresence(otherUid, (data) => {
+      setOtherOnline(data?.online || false);
+      setOtherLastSeen(data?.lastSeen || null);
+    });
+    return () => unsub();
+  }, [otherUid]);
+
+  // Auto-scroll
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = () => {
+      setContextMenu(null);
+      setShowAttach(false);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, []);
+
+  // Handle typing indicator
+  const handleTyping = useCallback(() => {
+    if (!chatId || !userProfile) return;
+    setTyping(chatId, userProfile.uid, true);
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      setTyping(chatId, userProfile.uid, false);
+    }, 3000);
+  }, [chatId, userProfile?.uid]);
+
+  // Send text message
+  const handleSend = async () => {
+    if (!inputText.trim() || !userProfile || !chatId) return;
+
+    const text = inputText.trim();
+    setInputText("");
+    setReplyTo(null);
+    setTyping(chatId, userProfile.uid, false);
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+
+    const extra: Record<string, any> = {};
+    if (replyTo) {
+      extra.replyTo = {
+        messageId: replyTo.id,
+        text: replyTo.text,
+        senderId: replyTo.senderId,
+        senderName: replyTo.senderName,
+      };
+    }
+
+    await sendMessage(chatId, userProfile.uid, userProfile.displayName, text, extra);
+  };
+
+  // Send image as Base64 encoded string directly into Firestore (Zero Storage)
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !userProfile || !chatId) return;
+
+    setUploading(true);
+    setShowAttach(false);
+
+    try {
+      const base64Code = await encodeImageToBase64(file);
+      await sendMessage(
+        chatId,
+        userProfile.uid,
+        userProfile.displayName,
+        "📷 صورة",
+        {
+          type: "image",
+          mediaCode: base64Code,
+        }
+      );
+    } catch (err) {
+      console.error("Image encode/send failed:", err);
+      alert("فشل تشفير وإرسال الصورة");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // Calls
+  const handleStartCall = (type: "audio" | "video") => {
+    if (!otherUid) return;
+    initiateCall(otherUid, otherName, "", type);
+  };
+
+  // Context menu actions
+  const handleReply = (msg: Message) => {
+    setReplyTo(msg);
+    setContextMenu(null);
+    textareaRef.current?.focus();
+  };
+
+  const handleDelete = async (msg: Message, forEveryone: boolean) => {
+    if (!userProfile) return;
+    await deleteMessage(chatId, msg.id, userProfile.uid, forEveryone);
+    setContextMenu(null);
+  };
+
+  const handleCopy = (msg: Message) => {
+    navigator.clipboard.writeText(msg.text);
+    setContextMenu(null);
+  };
+
+  const handleReaction = async (msg: Message, emoji: string) => {
+    if (!userProfile) return;
+    await addReaction(chatId, msg.id, emoji, userProfile.uid);
+    setContextMenu(null);
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputText(e.target.value);
+    handleTyping();
+    const ta = e.target;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+  };
+
+  const getInitials = (name: string) => {
+    if (!name || !name.trim()) return "#";
+    return name
+      .trim()
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase();
+  };
+
+  const getStatusText = () => {
+    if (typingUsers.length > 0) return "يكتب الآن...";
+    if (otherOnline) return "متصل الآن 🟢";
+    if (otherLastSeen) return `آخر ظهور ${formatLastSeen(otherLastSeen)}`;
+    return "غير متصل";
+  };
+
+  return (
+    <div className={styles.chatMain}>
+      <div className={styles.chatMainPattern} />
+
+      {/* Header */}
+      <div className={styles.chatHeader}>
+        <div className={styles.chatHeaderLeft}>
+          <button
+            className="btn-icon"
+            onClick={() => router.push("/chat")}
+            style={{ display: "none" }}
+          >
+            <ArrowLeft size={20} />
+          </button>
+
+          <div
+            className="avatar"
+            style={{
+              background: "var(--primary-gradient)",
+              color: "white",
+              fontWeight: 700,
+            }}
+          >
+            {getInitials(otherName)}
+            {otherOnline && <span className="online-dot" />}
+          </div>
+
+          <div className={styles.chatHeaderInfo}>
+            <div className={styles.chatHeaderName}>{otherName}</div>
+            <div
+              className={`${styles.chatHeaderStatus} ${
+                otherOnline || typingUsers.length > 0
+                  ? styles.chatHeaderStatusOnline
+                  : ""
+              }`}
+            >
+              {getStatusText()}
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.chatHeaderRight}>
+          <button
+            className="btn-icon"
+            title="مكالمة صوتية"
+            onClick={() => handleStartCall("audio")}
+          >
+            <Phone size={20} color="var(--text-secondary)" />
+          </button>
+          <button
+            className="btn-icon"
+            title="مكالمة فيديو"
+            onClick={() => handleStartCall("video")}
+          >
+            <Video size={20} color="var(--text-secondary)" />
+          </button>
+          <button className="btn-icon" title="المزيد">
+            <MoreVertical size={20} color="var(--text-secondary)" />
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className={styles.messagesArea}>
+        {messages.map((msg) => {
+          if (
+            msg.deletedFor?.includes(userProfile?.uid || "") &&
+            !msg.isDeleted
+          )
+            return null;
+
+          const isOutgoing = msg.senderId === userProfile?.uid;
+          const isSystem = msg.type === "system";
+
+          if (isSystem) {
+            return (
+              <div key={msg.id} className={styles.messageBubbleSystem}>
+                {msg.text}
+              </div>
+            );
+          }
+
+          return (
+            <div
+              key={msg.id}
+              className={`${styles.messageRow} ${
+                isOutgoing ? styles.messageRowOutgoing : styles.messageRowIncoming
+              }`}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setContextMenu({ x: e.clientX, y: e.clientY, message: msg });
+              }}
+            >
+              <div
+                className={`${styles.messageBubble} ${
+                  isOutgoing
+                    ? styles.messageBubbleOutgoing
+                    : styles.messageBubbleIncoming
+                }`}
+              >
+                {/* Reply preview */}
+                {msg.replyTo && (
+                  <div className={styles.replyPreview}>
+                    <div className={styles.replyPreviewContent}>
+                      <div className={styles.replyPreviewName}>
+                        {msg.replyTo.senderName}
+                      </div>
+                      <div className={styles.replyPreviewText}>
+                        {msg.replyTo.text}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Message content */}
+                {msg.isDeleted ? (
+                  <span className={styles.messageDeleted}>
+                    🚫 تم حذف هذه الرسالة
+                  </span>
+                ) : (
+                  <>
+                    {/* Encoded Base64 Image */}
+                    {msg.type === "image" && msg.mediaCode && (
+                      <div className={styles.messageMedia}>
+                        <img
+                          src={msg.mediaCode}
+                          alt="Encoded Media"
+                          style={{
+                            maxWidth: "100%",
+                            maxHeight: 300,
+                            borderRadius: 8,
+                            display: "block",
+                            objectFit: "cover",
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {msg.text && (msg.type !== "image" || !msg.mediaCode) && (
+                      <span className={styles.messageText}>{msg.text}</span>
+                    )}
+                  </>
+                )}
+
+                {/* Reactions */}
+                {msg.reactions &&
+                  Object.keys(msg.reactions).length > 0 && (
+                    <div className={styles.messageReactions}>
+                      {Object.entries(msg.reactions).map(([emoji, uids]) => (
+                        <span
+                          key={emoji}
+                          className={styles.reactionChip}
+                          onClick={() => handleReaction(msg, emoji)}
+                        >
+                          {emoji}
+                          <span className={styles.reactionCount}>
+                            {(uids as string[]).length}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                {/* Footer */}
+                <div className={styles.messageFooter}>
+                  {msg.isEdited && (
+                    <span className={styles.messageEdited}>تم التعديل</span>
+                  )}
+                  <span className={styles.messageTime}>
+                    {formatMessageTime(msg.createdAt)}
+                  </span>
+                  {isOutgoing && !msg.isDeleted && (
+                    <span
+                      className={`${styles.messageStatus} ${
+                        styles.messageStatusRead
+                      }`}
+                    >
+                      <CheckCheck size={14} />
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Typing indicator */}
+        {typingUsers.length > 0 && (
+          <div className={styles.messageRow + " " + styles.messageRowIncoming}>
+            <div className={styles.typingIndicator}>
+              <div className={styles.typingDot} />
+              <div className={styles.typingDot} />
+              <div className={styles.typingDot} />
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className={styles.contextMenu}
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className={styles.contextMenuItem}
+            onClick={() => handleReply(contextMenu.message)}
+          >
+            <Reply size={16} /> الرد
+          </div>
+          <div
+            className={styles.contextMenuItem}
+            onClick={() => handleCopy(contextMenu.message)}
+          >
+            <Copy size={16} /> نسخ النص
+          </div>
+          {/* Quick reactions */}
+          <div
+            style={{
+              display: "flex",
+              gap: 4,
+              padding: "6px 16px",
+              borderTop: "1px solid var(--divider)",
+              borderBottom: "1px solid var(--divider)",
+            }}
+          >
+            {["❤️", "😂", "👍", "😮", "😢", "🙏"].map((emoji) => (
+              <button
+                key={emoji}
+                style={{
+                  fontSize: "1.2rem",
+                  padding: "4px 6px",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  background: "none",
+                  border: "none",
+                }}
+                onClick={() => handleReaction(contextMenu.message, emoji)}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          {contextMenu.message.senderId === userProfile?.uid && (
+            <div
+              className={styles.contextMenuItem}
+              onClick={() => handleDelete(contextMenu.message, true)}
+            >
+              <Trash2 size={16} /> الحذف لدى الجميع
+            </div>
+          )}
+          <div
+            className={`${styles.contextMenuItem} ${styles.contextMenuDanger}`}
+            onClick={() => handleDelete(contextMenu.message, false)}
+          >
+            <Trash2 size={16} /> الحذف لدي فقط
+          </div>
+        </div>
+      )}
+
+      {/* Input Area */}
+      <div className={styles.inputArea}>
+        {/* Reply preview */}
+        {replyTo && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "100%",
+              left: 0,
+              right: 0,
+              padding: "8px 16px",
+              background: "var(--bg-primary)",
+              borderTop: "1px solid var(--divider)",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                flex: 1,
+                borderLeft: "3px solid var(--primary)",
+                paddingLeft: 8,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "0.78rem",
+                  fontWeight: 600,
+                  color: "var(--primary)",
+                }}
+              >
+                {replyTo.senderName}
+              </div>
+              <div
+                style={{
+                  fontSize: "0.82rem",
+                  color: "var(--text-secondary)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {replyTo.text}
+              </div>
+            </div>
+            <button className="btn-icon" onClick={() => setReplyTo(null)}>
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        <div style={{ position: "relative" }}>
+          <button
+            className="btn-icon"
+            title="إرفاق صورة مشفرة"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowAttach(!showAttach);
+            }}
+          >
+            <Paperclip size={20} color="var(--text-secondary)" />
+          </button>
+
+          {showAttach && (
+            <div
+              className={styles.attachMenu}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <label className={styles.attachItem} style={{ cursor: "pointer" }}>
+                <div
+                  className={styles.attachItemIcon}
+                  style={{ background: "#7C4DFF" }}
+                >
+                  <ImageIcon size={22} />
+                </div>
+                <span className={styles.attachItemLabel}>
+                  {uploading ? "جاري التشفير..." : "صورة (كود مشفر)"}
+                </span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={handleImageUpload}
+                  disabled={uploading}
+                />
+              </label>
+            </div>
+          )}
+        </div>
+
+        <div className={styles.inputWrapper}>
+          <textarea
+            ref={textareaRef}
+            placeholder="اكتب رسالتك هنا..."
+            value={inputText}
+            onChange={handleTextareaChange}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            rows={1}
+          />
+        </div>
+
+        <button
+          className={styles.sendBtn}
+          onClick={handleSend}
+          disabled={!inputText.trim()}
+          title="إرسال"
+        >
+          <Send size={20} />
+        </button>
+      </div>
+    </div>
+  );
+}
