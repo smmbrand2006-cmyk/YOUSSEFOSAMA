@@ -107,18 +107,18 @@ export default function RegisterPage() {
             {/* تنويه أمني وإخلاء مسؤولية صريح */}
             <div className={styles.securityNotice}>
               <div className={styles.securityNoticeHeader}>
-                <AlertTriangle size={18} />
-                <span>تنبيه أمني هام جداً وإخلاء مسؤولية</span>
+                <AlertTriangle size={15} />
+                <span>تنبيه أمني هام وإخلاء مسؤولية</span>
               </div>
               <ul className={styles.securityNoticeList}>
                 <li className={styles.securityNoticeItem}>
-                  <span><strong>حفظ كلمة المرور:</strong> يجب حفظ وتدوين كلمة المرور في مكان آمن وخاص بك تماماً.</span>
+                  <span><strong>حفظ كلمة المرور:</strong> احتفظ بكلمة المرور في مكان آمن وخاص بك تماماً.</span>
                 </li>
                 <li className={styles.securityNoticeItem}>
-                  <span><strong>إخلاء مسؤولية:</strong> إدارة التطبيق غير مسؤولة نهائياً عن تسريب أو ضياع كلمة المرور أو أي اختراق ناتج عن إهمالها.</span>
+                  <span><strong>إخلاء مسؤولية:</strong> إدارة التطبيق غير مسؤولة عن تسريب أو ضياع كلمة المرور.</span>
                 </li>
                 <li className={styles.securityNoticeItem}>
-                  <span><strong>لا توجد استعادة لكلمة المرور:</strong> التطبيق لا يطلب بريداً أو هاتفاً، لذا <strong>لا توجد أي وسيلة لإعادة تعيين أو استرجاع كلمة المرور</strong> في حال نسيانها نهائياً!</span>
+                  <span><strong>لا يوجد استرجاع:</strong> لا يمكن إعادة تعيين أو استرجاع كلمة المرور في حال فقدانها نهائياً.</span>
                 </li>
               </ul>
             </div>
@@ -131,7 +131,7 @@ export default function RegisterPage() {
                 onChange={(e) => setAgreedToSecurity(e.target.checked)}
               />
               <span>
-                أقر بأنني <strong>حفظت كلمة المرور في مكان آمن</strong>، وأتحمل كامل المسؤولية، وأعلم أنه <strong>لا يمكن استرجاعها نهائياً</strong> في حال فقدانها.
+                أقر بأنني <strong>حفظت كلمة المرور</strong> وأتحمل المسؤولية، وأعلم أنه <strong>لا يمكن استرجاعها نهائياً</strong>.
               </span>
             </label>
 

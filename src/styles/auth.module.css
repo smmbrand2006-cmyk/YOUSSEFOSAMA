@@ -1,7 +1,9 @@
 .authContainer {
   display: flex;
   min-height: 100vh;
+  height: 100vh;
   background: var(--bg-secondary);
+  overflow: hidden;
 }
 
 .authLeft {
@@ -9,9 +11,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--space-2xl);
+  padding: 20px 24px;
   background: var(--bg-primary);
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .authRight {
@@ -22,6 +26,7 @@
   background: var(--primary-gradient);
   position: relative;
   overflow: hidden;
+  height: 100%;
 }
 
 .authRight::before {
@@ -50,73 +55,81 @@
   text-align: center;
   color: var(--text-light);
   z-index: 1;
-  padding: var(--space-2xl);
+  padding: 24px;
+  direction: rtl;
+  max-width: 440px;
 }
 
 .authRightContent h2 {
-  font-size: 2.5rem;
+  font-size: 1.85rem;
   font-weight: 800;
-  margin-bottom: var(--space-md);
+  margin-bottom: 8px;
   letter-spacing: -0.5px;
 }
 
 .authRightContent p {
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   opacity: 0.9;
-  max-width: 400px;
-  line-height: 1.7;
+  max-width: 380px;
+  line-height: 1.55;
+  margin: 0 auto;
 }
 
 .authRightFeatures {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
-  margin-top: var(--space-xl);
-  text-align: left;
+  gap: 8px;
+  margin-top: 18px;
+  text-align: right;
 }
 
 .authFeature {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 0.95rem;
-  opacity: 0.9;
+  gap: 10px;
+  font-size: 0.85rem;
+  opacity: 0.92;
 }
 
 .authFeatureIcon {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 1.2rem;
+  font-size: 1rem;
 }
 
 .authCard {
   width: 100%;
-  max-width: 420px;
-  animation: slideUp 0.5s ease;
+  max-width: 410px;
+  margin: auto 0;
+  animation: slideUp 0.4s ease;
+  direction: rtl;
+  text-align: right;
+  box-sizing: border-box;
 }
 
 .authLogo {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: var(--space-2xl);
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .authLogoIcon {
-  width: 50px;
-  height: 50px;
-  border-radius: var(--radius-lg);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
   background: var(--primary-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-glow);
+  flex-shrink: 0;
 }
 
 .authLogoIcon svg {
@@ -124,7 +137,7 @@
 }
 
 .authLogo h1 {
-  font-size: 1.6rem;
+  font-size: 1.35rem;
   font-weight: 800;
   background: var(--primary-gradient);
   -webkit-background-clip: text;
@@ -133,22 +146,34 @@
 }
 
 .authTitle {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: var(--space-xs);
+  margin-bottom: 2px;
 }
 
 .authSubtitle {
-  font-size: 0.95rem;
+  font-size: 0.84rem;
   color: var(--text-secondary);
-  margin-bottom: var(--space-xl);
+  margin-bottom: 10px;
 }
 
 .authForm {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: 8px;
+}
+
+.authError {
+  padding: 8px 12px;
+  background: rgba(234, 0, 56, 0.08);
+  border: 1px solid rgba(234, 0, 56, 0.2);
+  border-radius: var(--radius-md);
+  color: var(--error);
+  font-size: 0.82rem;
+  text-align: right;
+  direction: rtl;
+  animation: slideUp 0.3s ease;
 }
 
 .authInput {
@@ -157,13 +182,16 @@
 
 .authInput input {
   width: 100%;
-  padding: 14px 16px 14px 48px;
+  padding: 10px 14px 10px 42px;
   background: var(--bg-secondary);
   border: 2px solid transparent;
   border-radius: var(--radius-md);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--text-primary);
   transition: all var(--transition-normal);
+  box-sizing: border-box;
+  text-align: right;
+  direction: rtl;
 }
 
 .authInput input:focus {
@@ -178,11 +206,12 @@
 
 .authInputIcon {
   position: absolute;
-  left: 16px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-tertiary);
   transition: color var(--transition-normal);
+  pointer-events: none;
 }
 
 .authInput input:focus + .authInputIcon,
@@ -192,24 +221,22 @@
 
 .authSubmit {
   width: 100%;
-  padding: 14px;
+  padding: 11px;
   background: var(--primary-gradient);
   color: var(--text-light);
   border: none;
   border-radius: var(--radius-md);
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 0.92rem;
+  font-weight: 700;
   cursor: pointer;
   transition: all var(--transition-normal);
   box-shadow: var(--shadow-sm);
-  margin-top: var(--space-sm);
-  position: relative;
-  overflow: hidden;
+  margin-top: 2px;
 }
 
 .authSubmit:hover {
   box-shadow: var(--shadow-glow);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .authSubmit:active {
@@ -222,55 +249,96 @@
   transform: none;
 }
 
-.authDivider {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  margin: var(--space-lg) 0;
-  color: var(--text-tertiary);
-  font-size: 0.85rem;
-}
-
-.authDivider::before,
-.authDivider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--divider);
-}
-
-.googleBtn {
-  width: 100%;
-  padding: 12px;
-  background: var(--bg-primary);
-  border: 2px solid var(--border-color);
+.securityNotice {
+  margin: 4px 0 6px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.28);
   border-radius: var(--radius-md);
-  font-size: 0.95rem;
-  font-weight: 500;
   color: var(--text-primary);
-  cursor: pointer;
-  transition: all var(--transition-normal);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  direction: rtl;
+  text-align: right;
+}
+
+.securityNoticeHeader {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #ef4444;
 }
 
-.googleBtn:hover {
-  border-color: var(--text-tertiary);
-  background: var(--bg-secondary);
+.securityNoticeList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.googleLogo {
-  width: 20px;
-  height: 20px;
+.securityNoticeItem {
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.securityNoticeItem strong {
+  color: var(--text-primary);
+}
+
+.securityNoticeItem::before {
+  content: "•";
+  color: #ef4444;
+  font-weight: bold;
+  font-size: 0.95rem;
+  line-height: 1.1;
+  flex-shrink: 0;
+}
+
+.securityCheckboxLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 0 6px;
+  cursor: pointer;
+  user-select: none;
+  direction: rtl;
+  text-align: right;
+}
+
+.securityCheckboxLabel input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.securityCheckboxLabel span {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.securityCheckboxLabel span strong {
+  color: var(--text-primary);
 }
 
 .authSwitch {
   text-align: center;
-  margin-top: var(--space-lg);
-  font-size: 0.9rem;
+  margin-top: 10px;
+  font-size: 0.82rem;
   color: var(--text-secondary);
+  direction: rtl;
 }
 
 .authSwitch a {
@@ -283,14 +351,21 @@
   text-decoration: underline;
 }
 
-.authError {
-  padding: 10px 14px;
-  background: rgba(234, 0, 56, 0.08);
-  border: 1px solid rgba(234, 0, 56, 0.2);
-  border-radius: var(--radius-md);
-  color: var(--error);
-  font-size: 0.85rem;
-  animation: slideUp 0.3s ease;
+.authDivider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin: 12px 0;
+  color: var(--text-tertiary);
+  font-size: 0.82rem;
+}
+
+.authDivider::before,
+.authDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--divider);
 }
 
 .avatarUpload {
@@ -301,8 +376,8 @@
 }
 
 .avatarUploadCircle {
-  width: 100px;
-  height: 100px;
+  width: 90px;
+  height: 90px;
   border-radius: var(--radius-full);
   background: var(--bg-secondary);
   border: 3px dashed var(--border-color);
@@ -331,88 +406,12 @@
   color: var(--text-tertiary);
 }
 
-.securityNotice {
-  margin: var(--space-md) 0;
-  padding: 14px 16px;
-  background: rgba(239, 68, 68, 0.06);
-  border: 1px solid rgba(239, 68, 68, 0.28);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.securityNoticeHeader {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 0.92rem;
-  color: #ef4444;
-}
-
-.securityNoticeList {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.securityNoticeItem {
-  font-size: 0.82rem;
-  line-height: 1.45;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.securityNoticeItem strong {
-  color: var(--text-primary);
-}
-
-.securityNoticeItem::before {
-  content: "•";
-  color: #ef4444;
-  font-weight: bold;
-  font-size: 1.1rem;
-  line-height: 1;
-}
-
-.securityCheckboxLabel {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: var(--space-sm) 0 var(--space-md);
-  cursor: pointer;
-  user-select: none;
-}
-
-.securityCheckboxLabel input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
-  accent-color: var(--primary);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.securityCheckboxLabel span {
-  font-size: 0.82rem;
-  line-height: 1.4;
-  color: var(--text-secondary);
-}
-
-.securityCheckboxLabel span strong {
-  color: var(--text-primary);
-}
-
 @media (max-width: 768px) {
   .authContainer {
     flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
   }
   
   .authRight {
@@ -420,6 +419,8 @@
   }
   
   .authLeft {
-    padding: var(--space-lg);
+    padding: 24px 16px;
+    height: auto;
+    min-height: 100vh;
   }
 }
