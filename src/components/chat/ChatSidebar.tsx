@@ -1,15 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useChats } from "@/lib/contexts/ChatContext";
 import { useRouter } from "next/navigation";
 import {
-  listenToFriendRequests,
   searchUsers,
-  sendFriendRequest,
-  acceptFriendRequest,
-  rejectFriendRequest,
   openOrCreateSupportChat,
   getOrCreateDirectChat,
   getChatDoc,
@@ -17,48 +13,35 @@ import {
   unblockUser,
 } from "@/lib/firebase/firestore";
 import { signOut } from "@/lib/firebase/auth";
-import { FriendRequest, Chat } from "@/lib/types/chat";
 import { UserProfile } from "@/lib/types/user";
 import { formatMessageTime } from "@/lib/utils/formatDate";
-import {
-  MessageCircle,
-  Search,
-  MoreVertical,
-  UserPlus,
-  Users,
-  Settings,
-  LogOut,
-  Pin,
-  VolumeX,
-  Headphones,
-} from "lucide-react";
 import UserProfileModal from "./UserProfileModal";
 import styles from "@/styles/chat.module.css";
 
-type SidebarTab = "chats" | "requests" | "search";
+type FilterType = "all" | "unread" | "groups" | "favorites";
 
 export default function ChatSidebar() {
   const { userProfile } = useAuth();
-  const { chats, activeChat, setActiveChat, totalUnread } = useChats();
+  const { chats, activeChat, setActiveChat } = useChats();
   const router = useRouter();
 
-  const [tab, setTab] = useState<SidebarTab>("chats");
   const [searchQuery, setSearchQuery] = useState("");
-  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [filter, setFilter] = useState<FilterType>("all");
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [searching, setSearching] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const [openingSupport, setOpeningSupport] = useState(false);
   const [selectedProfileUser, setSelectedProfileUser] = useState<UserProfile | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
-  // Listen to friend requests
+  // Close dropdown on click outside
   useEffect(() => {
-    if (!userProfile) return;
-    const unsub = listenToFriendRequests(userProfile.uid, setFriendRequests);
-    return () => unsub();
-  }, [userProfile?.uid]);
+    const handleClick = () => setShowMenu(false);
+    if (showMenu) {
+      window.addEventListener("click", handleClick);
+    }
+    return () => window.removeEventListener("click", handleClick);
+  }, [showMenu]);
 
   // Support Chat Handler
   const handleOpenSupport = async () => {
@@ -87,7 +70,7 @@ export default function ChatSidebar() {
     }
   };
 
-  // Instant direct chat with any user (no friend request needed)
+  // Instant direct chat with any user
   const handleStartDirectChat = async (targetUser: UserProfile) => {
     if (!userProfile) return;
     if (targetUser.userCode === "123") {
@@ -95,7 +78,8 @@ export default function ChatSidebar() {
     }
     try {
       const chatId = await getOrCreateDirectChat(userProfile, targetUser);
-      setTab("chats");
+      setSearchQuery("");
+      setSearchResults([]);
       const chatDoc = await getChatDoc(chatId);
       if (chatDoc) {
         setActiveChat(chatDoc);
@@ -115,13 +99,16 @@ export default function ChatSidebar() {
     }
   };
 
-  // Search users
-  const handleSearch = async () => {
-    if (!searchQuery.trim() || !userProfile) return;
+  // Search users live
+  const handleSearch = async (queryText: string) => {
+    const term = queryText.trim();
+    if (!term || !userProfile) {
+      setSearchResults([]);
+      return;
+    }
     setSearching(true);
     try {
-      const results = await searchUsers(searchQuery.trim());
-      // Filter out self
+      const results = await searchUsers(term);
       setSearchResults(results.filter((u) => u.uid !== userProfile.uid));
     } catch (err) {
       console.error("Search failed:", err);
@@ -130,58 +117,31 @@ export default function ChatSidebar() {
     }
   };
 
-  const handleSendRequest = async (targetUser: UserProfile) => {
-    if (!userProfile) return;
-    try {
-      await sendFriendRequest(
-        userProfile.uid,
-        targetUser.uid,
-        userProfile.displayName,
-        targetUser.displayName
-      );
-      setSentRequests((prev) => new Set(prev).add(targetUser.uid));
-    } catch (err: any) {
-      alert(err.message || "Failed to send request");
-    }
-  };
-
-  const handleAcceptRequest = async (requestId: string) => {
-    try {
-      const chatId = await acceptFriendRequest(requestId);
-      const chatDoc = await getChatDoc(chatId);
-      if (chatDoc) {
-        setActiveChat(chatDoc);
-      }
-    } catch (err: any) {
-      alert(err.message || "Failed to accept request");
-    }
-  };
-
-  const handleRejectRequest = async (requestId: string) => {
-    try {
-      await rejectFriendRequest(requestId);
-    } catch (err: any) {
-      alert(err.message || "Failed to reject request");
-    }
-  };
-
   const handleSignOut = async () => {
     await signOut();
     router.replace("/auth/login");
   };
 
-  const handleChatClick = (chat: any) => {
-    setActiveChat(chat);
-  };
-
   const getOtherParticipant = (chat: any) => {
     if (!userProfile) return { uid: "", name: "Unknown" };
-    const otherId = chat.participants.find(
+    const otherId = chat.participants?.find(
       (id: string) => id !== userProfile.uid
     );
+    const isSupp =
+      chat.isSupport ||
+      otherId === "support_123_uid" ||
+      otherId === "support_official_123";
+    if (isSupp) {
+      return {
+        uid: "support_official_123",
+        name: "الدعم الفني (123) 🎧",
+        isSupport: true,
+      };
+    }
     return {
       uid: otherId || "",
-      name: chat.participantNames?.[otherId] || "Unknown",
+      name: chat.participantNames?.[otherId] || "مستخدم",
+      isSupport: false,
     };
   };
 
@@ -196,513 +156,432 @@ export default function ChatSidebar() {
       .toUpperCase();
   };
 
+  // Filtered Chats
+  const filteredChats = chats.filter((chat) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const other = getOtherParticipant(chat);
+      const matchesName = other.name.toLowerCase().includes(q);
+      const matchesLastMsg = chat.lastMessage?.text?.toLowerCase().includes(q);
+      if (!matchesName && !matchesLastMsg) return false;
+    }
+
+    if (filter === "unread") {
+      const unread = chat.unreadCount?.[userProfile?.uid || ""] || 0;
+      return unread > 0;
+    }
+    if (filter === "groups") {
+      return chat.type === "group";
+    }
+    if (filter === "favorites") {
+      return !!chat.isPinned?.[userProfile?.uid || ""];
+    }
+    return true;
+  });
+
   return (
-    <div className={styles.sidebar}>
-      {/* Header */}
-      <div className={styles.sidebarHeader}>
-        <div className={styles.sidebarHeaderLeft}>
-          <div
-            className="avatar"
-            onClick={() => router.push("/profile")}
-            style={{
-              background: "var(--primary-gradient)",
-              color: "white",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            {getInitials(userProfile?.displayName || userProfile?.userCode || "U")}
-          </div>
-          <h2>Chats</h2>
-        </div>
-
-        <div className={styles.sidebarHeaderRight}>
-          {/* زر الدعم الفني المباشر (123) */}
+    <aside
+      className={`${styles.sidebar} ${
+        activeChat ? styles.sidebarHiddenOnMobile : ""
+      }`}
+    >
+      {/* 1. Top Header */}
+      <div className={styles.sidebarTopHeader}>
+        <h2 className={styles.sidebarChatsTitle}>Chats</h2>
+        <div className={styles.sidebarHeaderActions}>
+          {/* New Chat Button */}
           <button
-            className={`btn-icon ${styles.sidebarHeaderBtn}`}
+            type="button"
+            aria-label="New chat"
+            className={styles.sidebarHeaderIconBtn}
             onClick={handleOpenSupport}
-            title="الدعم الفني (123)"
+            title="محادثة جديدة أو الدعم الفني (#123)"
             disabled={openingSupport}
-            style={{
-              color: "#25D366",
-              background: "rgba(37, 211, 102, 0.12)",
-              borderRadius: "50%",
-            }}
           >
-            <Headphones size={20} />
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: "19px" }}
+            >
+              edit_square
+            </span>
           </button>
 
-          <button
-            className={`btn-icon ${styles.sidebarHeaderBtn}`}
-            onClick={() => setTab(tab === "search" ? "chats" : "search")}
-            title="بحث عن مستخدمين"
-          >
-            <UserPlus size={20} color="var(--text-secondary)" />
-          </button>
-
-          <button
-            className={`btn-icon ${styles.sidebarHeaderBtn}`}
-            onClick={() => setTab(tab === "requests" ? "chats" : "requests")}
-            title="طلبات المراسلة"
-          >
-            <Users size={20} color="var(--text-secondary)" />
-            {friendRequests.length > 0 && (
-              <span className={styles.requestBadge}>
-                {friendRequests.length}
-              </span>
-            )}
-          </button>
-
+          {/* Menu Dropdown Button */}
           <div style={{ position: "relative" }}>
             <button
-              className="btn-icon"
-              onClick={() => setShowMenu(!showMenu)}
+              type="button"
+              aria-label="Menu"
+              className={styles.sidebarHeaderIconBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
+              title="القائمة"
             >
-              <MoreVertical size={20} color="var(--text-secondary)" />
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: "19px" }}
+              >
+                more_vert
+              </span>
             </button>
+
             {showMenu && (
               <div
                 className="dropdown"
-                style={{ right: 0, top: "100%", marginTop: 4 }}
+                style={{ right: 0, top: "100%", marginTop: 6 }}
+                onClick={(e) => e.stopPropagation()}
               >
-                <button
+                <div className="dropdown-item" onClick={handleOpenSupport}>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: "18px", color: "var(--primary)" }}
+                  >
+                    support_agent
+                  </span>
+                  الدعم الفني (123)
+                </div>
+                <div
                   className="dropdown-item"
-                  onClick={() => {
-                    setShowMenu(false);
-                    handleOpenSupport();
-                  }}
-                  style={{ color: "var(--primary)", fontWeight: 600 }}
+                  onClick={() => router.push("/profile")}
                 >
-                  <Headphones size={16} color="var(--primary)" /> الدعم الفني (#123)
-                </button>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: "18px" }}
+                  >
+                    account_circle
+                  </span>
+                  الملف الشخصي
+                </div>
                 <div className="dropdown-divider" />
-                <button
-                  className="dropdown-item"
-                  onClick={() => {
-                    setShowMenu(false);
-                    router.push("/profile");
-                  }}
-                >
-                  <Settings size={16} /> الملف الشخصي
-                </button>
-                <div className="dropdown-divider" />
-                <button
+                <div
                   className="dropdown-item dropdown-item-danger"
-                  onClick={() => {
-                    setShowMenu(false);
-                    handleSignOut();
-                  }}
+                  onClick={handleSignOut}
                 >
-                  <LogOut size={16} /> تسجيل الخروج
-                </button>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: "18px" }}
+                  >
+                    logout
+                  </span>
+                  تسجيل الخروج
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Support quick banner */}
-      <div
-        onClick={handleOpenSupport}
-        style={{
-          margin: "8px 12px 0",
-          padding: "8px 12px",
-          background: "linear-gradient(135deg, rgba(37, 211, 102, 0.12), rgba(18, 140, 126, 0.08))",
-          border: "1px solid rgba(37, 211, 102, 0.25)",
-          borderRadius: "var(--radius-md)",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          cursor: "pointer",
-          transition: "all 0.2s",
-        }}
-        title="انقر لفتح محادثة فورية مع الدعم"
-      >
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            background: "var(--primary)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "white",
-            flexShrink: 0,
-          }}
-        >
-          <Headphones size={16} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>
-            الدعم الفني والمساعدة 🎧
-          </div>
-          <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
-            تواصل مباشرة مع المشرف كود: #123
-          </div>
-        </div>
-        <span style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: 600 }}>
-          شات ←
-        </span>
-      </div>
-
-      {/* Search bar */}
-      <div className={styles.searchBar}>
-        <div className={styles.searchInput}>
-          <Search size={16} />
+      {/* 2. Search Container */}
+      <div className={styles.searchContainer}>
+        <div className={styles.searchInner}>
+          <span
+            className="material-symbols-outlined"
+            style={{ color: "var(--outline)", fontSize: "18px" }}
+          >
+            search
+          </span>
           <input
+            id="chat-search-input"
             type="text"
-            placeholder={
-              tab === "search"
-                ? "ابحث بالكود أو بالاسم..."
-                : "البحث في المحادثات..."
-            }
+            placeholder="بحث أو بدء محادثة جديدة..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && tab === "search") handleSearch();
+            onChange={(e) => {
+              const val = e.target.value;
+              setSearchQuery(val);
+              handleSearch(val);
             }}
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setSearchResults([]);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--outline)",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: "16px" }}
+              >
+                close
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className={styles.tabs}>
-        <div
-          className={`${styles.tab} ${tab === "chats" ? styles.tabActive : ""}`}
-          onClick={() => setTab("chats")}
-        >
-          المحادثات
-          {totalUnread > 0 && (
-            <span className={styles.tabBadge}>{totalUnread}</span>
-          )}
-        </div>
-        <div
-          className={`${styles.tab} ${
-            tab === "requests" ? styles.tabActive : ""
+      {/* 3. Filter Pills Row */}
+      <div className={styles.filterPillsRow}>
+        <button
+          type="button"
+          className={`${styles.filterPill} ${
+            filter === "all" ? styles.filterPillActive : ""
           }`}
-          onClick={() => setTab("requests")}
+          onClick={() => setFilter("all")}
         >
-          الطلبات
-          {friendRequests.length > 0 && (
-            <span className={styles.tabBadge}>{friendRequests.length}</span>
-          )}
-        </div>
-        <div
-          className={`${styles.tab} ${
-            tab === "search" ? styles.tabActive : ""
+          الكل
+        </button>
+        <button
+          type="button"
+          className={`${styles.filterPill} ${
+            filter === "unread" ? styles.filterPillActive : ""
           }`}
-          onClick={() => setTab("search")}
+          onClick={() => setFilter("unread")}
         >
-          بحث
-        </div>
+          غير مقروءة
+        </button>
+        <button
+          type="button"
+          className={`${styles.filterPill} ${
+            filter === "groups" ? styles.filterPillActive : ""
+          }`}
+          onClick={() => setFilter("groups")}
+        >
+          المجموعات
+        </button>
+        <button
+          type="button"
+          className={`${styles.filterPill} ${
+            filter === "favorites" ? styles.filterPillActive : ""
+          }`}
+          onClick={() => setFilter("favorites")}
+        >
+          المفضلة
+        </button>
+        <button
+          type="button"
+          aria-label="Add filter"
+          className={`${styles.filterPill} ${styles.filterPillAdd}`}
+          onClick={handleOpenSupport}
+          title="تواصل مع الدعم الفني"
+        >
+          <span
+            className="material-symbols-outlined"
+            style={{ fontSize: "15px" }}
+          >
+            add
+          </span>
+        </button>
       </div>
 
-      {/* Content */}
+      {/* 4. Conversation List */}
       <div className={styles.chatList}>
-        {tab === "chats" && (
-          <>
-            {chats.length === 0 ? (
-              <div className="empty-state">
-                <MessageCircle size={48} />
-                <h3>لا توجد محادثات بعد</h3>
-                <p>
-                  ابحث عن مستخدمين بكودهم الخاص وأرسل لهم طلب صداقة، أو ابدأ محادثة فورية مع الدعم الفني!
-                </p>
-                <button
-                  onClick={handleOpenSupport}
-                  style={{
-                    marginTop: 12,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "8px 16px",
-                    background: "var(--primary-gradient)",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "var(--radius-full)",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                    fontSize: "0.85rem",
+        {/* If live search results exist */}
+        {searchQuery.trim() && searchResults.length > 0 && (
+          <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--on-secondary)" }}>
+            <span style={{ fontSize: "0.78rem", color: "var(--primary)", fontWeight: 600 }}>
+              نتائج البحث عن مستخدمين ({searchResults.length})
+            </span>
+            {searchResults.map((user) => (
+              <div
+                key={user.uid}
+                className={styles.chatRow}
+                onClick={() => handleStartDirectChat(user)}
+                style={{ marginTop: 4 }}
+              >
+                <div
+                  className={styles.chatRowAvatar}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedProfileUser(user);
+                    setShowProfileModal(true);
                   }}
+                  title="عرض الملف التعريفي"
+                  style={{ cursor: "pointer" }}
                 >
-                  <Headphones size={16} /> تواصل مع الدعم الفني (#123)
-                </button>
-              </div>
-            ) : (
-              chats.map((chat) => {
-                const other =
-                  chat.type === "direct"
-                    ? getOtherParticipant(chat)
-                    : { uid: "", name: chat.groupName || "Group" };
-                const isBlocked = !!(other.uid && userProfile?.blockedUsers?.includes(other.uid));
-                const unread = chat.unreadCount?.[userProfile?.uid || ""] || 0;
-                const isPinned = chat.isPinned?.[userProfile?.uid || ""];
-                const isMuted = chat.isMuted?.[userProfile?.uid || ""];
-
-                return (
-                  <div
-                    key={chat.id}
-                    className={`${styles.chatItem} ${
-                      activeChat?.id === chat.id ? styles.chatItemActive : ""
-                    }`}
-                    onClick={() => handleChatClick(chat)}
-                  >
-                    <div
-                      className="avatar"
-                      onClick={(e) => {
-                        if (other.uid) {
-                          e.stopPropagation();
-                          setSelectedProfileUser({
-                            uid: other.uid,
-                            displayName: other.name,
-                            userCode: "",
-                          } as any);
-                          setShowProfileModal(true);
-                        }
-                      }}
-                      title="عرض الملف التعريفي"
-                      style={{
-                        background: "var(--primary-gradient)",
-                        color: "white",
-                        fontWeight: 700,
-                        cursor: other.uid ? "pointer" : "default",
-                      }}
-                    >
-                      {getInitials(other.name)}
-                    </div>
-
-                    <div className={styles.chatItemInfo}>
-                      <div className={styles.chatItemTop}>
-                        <span className={styles.chatItemName}>
-                          {other.name}
-                          {isBlocked && (
-                            <span style={{ color: "#ef4444", fontSize: "0.75rem", marginRight: 4 }}>
-                              (محظور 🚫)
-                            </span>
-                          )}
-                        </span>
-                        <span
-                          className={`${styles.chatItemTime} ${
-                            unread > 0 ? styles.chatItemTimeUnread : ""
-                          }`}
-                        >
-                          {formatMessageTime(chat.lastMessage?.createdAt)}
-                        </span>
-                      </div>
-
-                      <div className={styles.chatItemBottom}>
-                        <span className={styles.chatItemMessage}>
-                          {chat.lastMessage?.text || "ابدأ المحادثة"}
-                        </span>
-                        <div className={styles.chatItemMeta}>
-                          {isPinned && (
-                            <Pin size={14} className={styles.pinIcon} />
-                          )}
-                          {isMuted && (
-                            <VolumeX size={14} className={styles.muteIcon} />
-                          )}
-                          {unread > 0 && (
-                            <span className="badge">{unread}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                  {getInitials(user.displayName || user.userCode)}
+                  {user.isOnline && <span className={styles.chatRowOnlineDot} />}
+                </div>
+                <div className={styles.chatRowContent}>
+                  <div className={styles.chatRowNameRow}>
+                    <span className={styles.chatRowName}>{user.displayName}</span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--primary)" }}>
+                      #{user.userCode}
+                    </span>
                   </div>
-                );
-              })
-            )}
-          </>
-        )}
-
-        {tab === "requests" && (
-          <>
-            {friendRequests.length === 0 ? (
-              <div className="empty-state">
-                <Users size={48} />
-                <h3>لا توجد طلبات واردة</h3>
-                <p>طلبات المراسلة التي تصلك ستظهر هنا.</p>
-              </div>
-            ) : (
-              friendRequests.map((req) => (
-                <div key={req.id} className={styles.requestCard}>
-                  <div
-                    className="avatar"
-                    style={{
-                      background: "var(--primary-gradient)",
-                      color: "white",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {getInitials(req.fromName)}
-                  </div>
-                  <div className={styles.requestInfo}>
-                    <div className={styles.requestName}>{req.fromName}</div>
-                    {req.message && (
-                      <div className={styles.requestMessage}>
-                        {req.message}
-                      </div>
-                    )}
-                  </div>
-                  <div className={styles.requestActions}>
-                    <button
-                      className={styles.requestAccept}
-                      onClick={() => handleAcceptRequest(req.id)}
-                    >
-                      قبول
-                    </button>
-                    <button
-                      className={styles.requestReject}
-                      onClick={() => handleRejectRequest(req.id)}
-                    >
-                      رفض
-                    </button>
+                  <div className={styles.chatRowPreviewRow}>
+                    <span className={styles.chatRowPreview}>
+                      {user.bio || "اضغط لبدء محادثة مباشرة"}
+                    </span>
                   </div>
                 </div>
-              ))
-            )}
-          </>
+              </div>
+            ))}
+          </div>
         )}
 
-        {tab === "search" && (
-          <div className={styles.searchUsersPanel}>
-            {searching ? (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  padding: 32,
-                }}
+        {/* Pinned Official Support Row */}
+        {filter === "all" && !searchQuery.trim() && (
+          <div
+            className={`${styles.chatRow} ${
+              activeChat?.isSupport ||
+              activeChat?.participants?.includes("support_official_123")
+                ? styles.chatRowSelected
+                : ""
+            }`}
+            onClick={handleOpenSupport}
+            style={{
+              background: "rgba(0, 168, 132, 0.05)",
+              borderBottom: "1px solid rgba(48, 48, 48, 0.4)",
+            }}
+          >
+            <div
+              className={styles.chatRowAvatar}
+              style={{
+                background: "linear-gradient(135deg, #00a884, #59dcb5)",
+                color: "white",
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: "24px" }}
               >
-                <div className="loading-spinner" />
+                support_agent
+              </span>
+              <span className={styles.chatRowOnlineDot} />
+            </div>
+            <div className={styles.chatRowContent}>
+              <div className={styles.chatRowNameRow}>
+                <span
+                  className={styles.chatRowName}
+                  style={{ color: "var(--primary)", fontWeight: 600 }}
+                >
+                  الدعم الفني الرسمي (#123) 🎧
+                </span>
+                <span className={styles.chatRowTime} style={{ color: "var(--primary)" }}>
+                  24/7
+                </span>
               </div>
-            ) : searchResults.length > 0 ? (
-              searchResults.map((user) => {
-                const isSupport = user.userCode === "123";
-                return (
-                  <div
-                    key={user.uid}
-                    className={styles.searchResultItem}
-                    onClick={() => {
-                      if (isSupport) {
-                        handleOpenSupport();
-                      } else {
-                        handleStartDirectChat(user);
-                      }
-                    }}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <div
-                      className="avatar"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedProfileUser(user);
-                        setShowProfileModal(true);
-                      }}
-                      title="عرض الملف التعريفي"
-                      style={{
-                        background: isSupport
-                          ? "linear-gradient(135deg, #128C7E, #25D366)"
-                          : "var(--primary-gradient)",
-                        color: "white",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
+              <div className={styles.chatRowPreviewRow}>
+                <span className={styles.chatRowPreview}>
+                  تواصل معنا فوراً في أي وقت للإجابة على استفساراتك
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Regular Chats List */}
+        {filteredChats.length === 0 && !searchQuery.trim() ? (
+          <div className="empty-state" style={{ padding: "40px 16px" }}>
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: "48px", color: "var(--outline)", opacity: 0.5, marginBottom: 12 }}
+            >
+              chat
+            </span>
+            <h3 style={{ fontSize: "1rem", color: "var(--on-surface)", marginBottom: 6 }}>
+              لا توجد محادثات هنا
+            </h3>
+            <p style={{ fontSize: "0.82rem", color: "var(--outline)", maxWidth: 280 }}>
+              ابحث عن أي شخص بكوده الخاص في شريط البحث بالأعلى لبدء المحادثة معه فوراً!
+            </p>
+          </div>
+        ) : (
+          filteredChats.map((chat) => {
+            const other =
+              chat.type === "direct"
+                ? getOtherParticipant(chat)
+                : { uid: "", name: chat.groupName || "مجموعة", isSupport: false };
+
+            const isBlocked = !!(
+              other.uid &&
+              userProfile?.blockedUsers &&
+              userProfile.blockedUsers.includes(other.uid)
+            );
+            const isSelected = activeChat?.id === chat.id;
+            const unread = chat.unreadCount?.[userProfile?.uid || ""] || 0;
+
+            return (
+              <div
+                key={chat.id}
+                className={`${styles.chatRow} ${
+                  isSelected ? styles.chatRowSelected : ""
+                }`}
+                onClick={() => setActiveChat(chat)}
+              >
+                {/* Avatar */}
+                <div
+                  className={styles.chatRowAvatar}
+                  onClick={(e) => {
+                    if (other.uid && !other.isSupport) {
+                      e.stopPropagation();
+                      setSelectedProfileUser({
+                        uid: other.uid,
+                        displayName: other.name,
+                        userCode: "",
+                      } as any);
+                      setShowProfileModal(true);
+                    }
+                  }}
+                  title="عرض الملف التعريفي"
+                  style={{
+                    cursor: other.uid && !other.isSupport ? "pointer" : "default",
+                  }}
+                >
+                  {other.isSupport ? (
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "24px", color: "var(--primary)" }}
                     >
-                      {isSupport ? (
-                        <Headphones size={18} />
-                      ) : (
-                        getInitials(user.displayName || user.userCode)
+                      support_agent
+                    </span>
+                  ) : (
+                    getInitials(other.name)
+                  )}
+                </div>
+
+                {/* Info */}
+                <div className={styles.chatRowContent}>
+                  <div className={styles.chatRowNameRow}>
+                    <span className={styles.chatRowName}>
+                      {other.name}
+                      {isBlocked && (
+                        <span
+                          style={{
+                            color: "var(--error)",
+                            fontSize: "0.75rem",
+                            marginRight: 4,
+                          }}
+                        >
+                          (محظور 🚫)
+                        </span>
                       )}
-                    </div>
-                    <div className={styles.searchResultInfo}>
-                      <div className={styles.searchResultName}>
-                        {user.displayName} {isSupport && "🎧"}
-                      </div>
-                      <div className={styles.searchResultCode}>
-                        #{user.userCode}
-                      </div>
-                    </div>
-                    {isSupport ? (
-                      <button
-                        className={styles.searchResultBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenSupport();
-                        }}
-                        style={{
-                          background: "linear-gradient(135deg, #128C7E, #25D366)",
-                          color: "white",
-                          fontWeight: 700,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "6px 14px",
-                        }}
-                      >
-                        <Headphones size={14} /> محادثة الدعم فوراً
-                      </button>
-                    ) : (
-                      <button
-                        className={styles.searchResultBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartDirectChat(user);
-                        }}
-                        style={{
-                          background: "var(--primary)",
-                          color: "white",
-                          fontWeight: 600,
-                          padding: "6px 14px",
-                        }}
-                      >
-                        مراسلة فورية 💬
-                      </button>
+                    </span>
+                    <span
+                      className={`${styles.chatRowTime} ${
+                        unread > 0 ? styles.chatRowTimeUnread : ""
+                      }`}
+                    >
+                      {formatMessageTime(chat.lastMessage?.createdAt)}
+                    </span>
+                  </div>
+
+                  <div className={styles.chatRowPreviewRow}>
+                    <span className={styles.chatRowPreview}>
+                      {chat.lastMessage?.text || "ابدأ المحادثة..."}
+                    </span>
+                    {unread > 0 && (
+                      <span className={styles.chatRowBadge}>{unread}</span>
                     )}
                   </div>
-                );
-              })
-            ) : searchQuery ? (
-              <div className="empty-state">
-                <Search size={48} />
-                <h3>لا توجد نتائج</h3>
-                <p>
-                  جرب كوداً أو اسماً آخر، واضغط Enter للبحث.
-                </p>
+                </div>
               </div>
-            ) : (
-              <div className="empty-state">
-                <UserPlus size={48} />
-                <h3>البحث عن أشخاص</h3>
-                <p>
-                  اكتب كود المستخدم أو الاسم واضغط Enter للبحث.
-                </p>
-              </div>
-            )}
-          </div>
+            );
+          })
         )}
       </div>
 
-      {/* User Code Display */}
-      {userProfile && (
-        <div
-          style={{
-            padding: "10px 16px",
-            borderTop: "1px solid var(--divider)",
-            background: "var(--bg-secondary)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            fontSize: "0.8rem",
-            color: "var(--text-tertiary)",
-          }}
-        >
-          <span>كودك: <strong style={{ color: "var(--text-primary)" }}>#{userProfile.userCode}</strong></span>
-          <span>{userProfile.displayName}</span>
-        </div>
-      )}
-
-      {/* User Profile Modal */}
+      {/* Profile Modal */}
       <UserProfileModal
         isOpen={showProfileModal}
         onClose={() => {
@@ -710,7 +589,12 @@ export default function ChatSidebar() {
           setSelectedProfileUser(null);
         }}
         user={selectedProfileUser}
-        isBlocked={!!(selectedProfileUser && userProfile?.blockedUsers?.includes(selectedProfileUser.uid))}
+        isBlocked={
+          !!(
+            selectedProfileUser &&
+            userProfile?.blockedUsers?.includes(selectedProfileUser.uid)
+          )
+        }
         onToggleBlock={async () => {
           if (!userProfile || !selectedProfileUser) return;
           const targetUid = selectedProfileUser.uid;
@@ -727,6 +611,6 @@ export default function ChatSidebar() {
         }}
         isSupport={selectedProfileUser?.userCode === "123"}
       />
-    </div>
+    </aside>
   );
 }

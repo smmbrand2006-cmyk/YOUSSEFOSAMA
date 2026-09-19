@@ -409,48 +409,50 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
   };
 
   return (
-    <div className={`${styles.chatMain} ${styles.chatMainActive}`}>
-      <div className={styles.chatMainPattern} />
-
-      {/* Header */}
-      <div className={styles.chatHeader}>
+    <section className={styles.chatMain}>
+      {/* Top Chat Header */}
+      <div className={styles.chatTopBar}>
         <div
-          className={styles.chatHeaderLeft}
+          className={styles.chatTopProfile}
           onClick={() => setShowProfileModal(true)}
-          style={{ cursor: "pointer" }}
           title="عرض الملف التعريفي"
         >
           <button
-            className={`btn-icon ${styles.mobileBackBtn}`}
+            type="button"
+            className={styles.mobileBackBtn}
             onClick={(e) => {
               e.stopPropagation();
               setActiveChat(null);
             }}
             title="رجوع"
           >
-            <ArrowLeft size={22} />
+            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+              arrow_back
+            </span>
           </button>
 
-          <div
-            className="avatar"
-            style={{
-              background: "var(--primary-gradient)",
-              color: "white",
-              fontWeight: 700,
-            }}
-          >
-            {getInitials(otherName)}
-            {otherOnline && <span className="online-dot" />}
+          <div className={styles.chatTopAvatar}>
+            {isSupport ? (
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: "24px", color: "var(--primary)" }}
+              >
+                support_agent
+              </span>
+            ) : (
+              getInitials(otherName)
+            )}
+            {otherOnline && <span className={styles.chatRowOnlineDot} />}
           </div>
 
-          <div className={styles.chatHeaderInfo}>
-            <div className={styles.chatHeaderName}>
-              {otherName} {isBlocked && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginRight: 4 }}>(محظور 🚫)</span>}
+          <div className={styles.chatTopInfo}>
+            <div className={styles.chatTopName}>
+              {otherName} {isBlocked && <span style={{ color: "var(--error)", fontSize: "0.75rem", marginRight: 4 }}>(محظور 🚫)</span>}
             </div>
             <div
-              className={`${styles.chatHeaderStatus} ${
+              className={`${styles.chatTopStatus} ${
                 otherOnline || typingUsers.length > 0
-                  ? styles.chatHeaderStatusOnline
+                  ? styles.chatTopStatusOnline
                   : ""
               }`}
             >
@@ -459,33 +461,132 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           </div>
         </div>
 
-        <div className={styles.chatHeaderRight}>
+        {/* Header Actions */}
+        <div className={styles.chatTopActions}>
           <button
-            className="btn-icon"
-            title="مكالمة صوتية"
-            onClick={() => handleStartCall("audio")}
-          >
-            <Phone size={20} color="var(--text-secondary)" />
-          </button>
-          <button
-            className="btn-icon"
-            title="مكالمة فيديو"
+            type="button"
+            aria-label="Video Call"
+            className={styles.chatTopActionBtn}
             onClick={() => handleStartCall("video")}
+            title="مكالمة فيديو"
           >
-            <Video size={20} color="var(--text-secondary)" />
+            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+              videocam
+            </span>
           </button>
+
           <button
-            className="btn-icon"
-            title="الملف التعريفي والخيارات"
-            onClick={() => setShowProfileModal(true)}
+            type="button"
+            aria-label="Voice Call"
+            className={styles.chatTopActionBtn}
+            onClick={() => handleStartCall("audio")}
+            title="مكالمة صوتية"
           >
-            <MoreVertical size={20} color="var(--text-secondary)" />
+            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+              call
+            </span>
+          </button>
+
+          <div className={styles.chatTopDivider} />
+
+          <button
+            type="button"
+            aria-label="Search"
+            className={styles.chatTopActionBtn}
+            title="بحث في المحادثة"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+              search
+            </span>
+          </button>
+
+          <button
+            type="button"
+            aria-label="More"
+            className={styles.chatTopActionBtn}
+            onClick={() => setShowProfileModal(true)}
+            title="الخيارات والملف التعريفي"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+              more_vert
+            </span>
           </button>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className={styles.messagesArea}>
+      {/* Main Chat Conversation Canvas */}
+      <div className={styles.chatCanvas}>
+        {/* Subtle Authentic WhatsApp Web Dark Pattern (3% Opacity SVG Tile) */}
+        <svg
+          className={styles.chatSvgPattern}
+          height="100%"
+          width="100%"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <pattern
+              height="60"
+              id="wa-pattern"
+              patternUnits="userSpaceOnUse"
+              width="60"
+            >
+              <path
+                d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm24 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm16 16a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm-40 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm16 16a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm24 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm-16 16a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"
+                fill="#E5E2E1"
+              />
+              <circle cx="28" cy="20" fill="#E5E2E1" r="1.5" />
+              <circle cx="48" cy="40" fill="#E5E2E1" r="1.5" />
+              <circle cx="8" cy="48" fill="#E5E2E1" r="1.5" />
+            </pattern>
+          </defs>
+          <rect fill="url(#wa-pattern)" height="100%" width="100%" />
+        </svg>
+
+        {/* Context Menu */}
+        {contextMenu && (
+          <div
+            className={styles.contextMenu}
+            style={{
+              top: Math.min(contextMenu.y, window.innerHeight - 250),
+              left: Math.min(contextMenu.x, window.innerWidth - 200),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.reactionsBar}>
+              {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  style={{
+                    fontSize: "1.2rem",
+                    cursor: "pointer",
+                    background: "none",
+                    border: "none",
+                  }}
+                  onClick={() => handleReaction(contextMenu.message, emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            {contextMenu.message.senderId === userProfile?.uid && (
+              <div
+                className={styles.contextMenuItem}
+                onClick={() => handleDelete(contextMenu.message, true)}
+              >
+                <Trash2 size={16} /> الحذف لدى الجميع
+              </div>
+            )}
+            <div
+              className={`${styles.contextMenuItem} ${styles.contextMenuDanger}`}
+              onClick={() => handleDelete(contextMenu.message, false)}
+            >
+              <Trash2 size={16} /> الحذف لدي فقط
+            </div>
+          </div>
+        )}
+
+        {/* Messages */}
         {messages.map((msg) => {
           if (
             msg.deletedFor?.includes(userProfile?.uid || "") &&
@@ -498,7 +599,19 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
 
           if (isSystem) {
             return (
-              <div key={msg.id} className={styles.messageBubbleSystem}>
+              <div
+                key={msg.id}
+                style={{
+                  alignSelf: "center",
+                  background: "var(--surface-container)",
+                  color: "var(--outline)",
+                  fontSize: "0.78rem",
+                  padding: "4px 12px",
+                  borderRadius: "8px",
+                  margin: "8px 0",
+                  zIndex: 1,
+                }}
+              >
                 {msg.text}
               </div>
             );
@@ -507,99 +620,96 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           return (
             <div
               key={msg.id}
-              className={`${styles.messageRow} ${
-                isOutgoing ? styles.messageRowOutgoing : styles.messageRowIncoming
-              }`}
+              className={isOutgoing ? styles.msgRowOutgoing : styles.msgRowIncoming}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setContextMenu({ x: e.clientX, y: e.clientY, message: msg });
               }}
             >
               <div
-                className={`${styles.messageBubble} ${
+                className={
                   isOutgoing
-                    ? styles.messageBubbleOutgoing
-                    : styles.messageBubbleIncoming
-                }`}
+                    ? styles.msgBubbleOutgoing
+                    : styles.msgBubbleIncoming
+                }
               >
                 {/* Reply preview */}
                 {msg.replyTo && (
-                  <div className={styles.replyPreview}>
-                    <div className={styles.replyPreviewContent}>
-                      <div className={styles.replyPreviewName}>
-                        {msg.replyTo.senderName}
-                      </div>
-                      <div className={styles.replyPreviewText}>
-                        {msg.replyTo.text}
-                      </div>
+                  <div
+                    style={{
+                      background: "rgba(0,0,0,0.2)",
+                      borderLeft: "3px solid var(--primary)",
+                      padding: "4px 8px",
+                      borderRadius: "4px",
+                      marginBottom: "6px",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, color: "var(--primary)" }}>
+                      {msg.replyTo.senderName}
+                    </div>
+                    <div
+                      style={{
+                        color: "var(--outline)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {msg.replyTo.text}
                     </div>
                   </div>
                 )}
 
-                {/* Message content */}
+                {/* Message Content */}
                 {msg.isDeleted ? (
-                  <span className={styles.messageDeleted}>
+                  <span
+                    style={{
+                      color: "var(--outline)",
+                      fontStyle: "italic",
+                      fontSize: "0.82rem",
+                    }}
+                  >
                     🚫 تم حذف هذه الرسالة
                   </span>
                 ) : (
                   <>
-                    {/* Encoded Base64 Image */}
                     {msg.type === "image" && msg.mediaCode && (
-                      <div className={styles.messageMedia}>
+                      <div style={{ marginBottom: 6 }}>
                         <img
                           src={msg.mediaCode}
-                          alt="Encoded Media"
+                          alt="صورة مشفرة"
                           style={{
                             maxWidth: "100%",
-                            maxHeight: 300,
-                            borderRadius: 8,
+                            maxHeight: 320,
+                            borderRadius: 6,
                             display: "block",
                             objectFit: "cover",
                           }}
                         />
                       </div>
                     )}
-
                     {msg.text && (msg.type !== "image" || !msg.mediaCode) && (
-                      <span className={styles.messageText}>{msg.text}</span>
+                      <span>{msg.text}</span>
                     )}
                   </>
                 )}
 
-                {/* Reactions */}
-                {msg.reactions &&
-                  Object.keys(msg.reactions).length > 0 && (
-                    <div className={styles.messageReactions}>
-                      {Object.entries(msg.reactions).map(([emoji, uids]) => (
-                        <span
-                          key={emoji}
-                          className={styles.reactionChip}
-                          onClick={() => handleReaction(msg, emoji)}
-                        >
-                          {emoji}
-                          <span className={styles.reactionCount}>
-                            {(uids as string[]).length}
-                          </span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                {/* Footer */}
-                <div className={styles.messageFooter}>
-                  {msg.isEdited && (
-                    <span className={styles.messageEdited}>تم التعديل</span>
-                  )}
-                  <span className={styles.messageTime}>
-                    {formatMessageTime(msg.createdAt)}
-                  </span>
-                  {isOutgoing && !msg.isDeleted && (
+                {/* Time & checkmark */}
+                <div className={styles.msgMeta}>
+                  <span>{formatMessageTime(msg.createdAt)}</span>
+                  {isOutgoing && (
                     <span
-                      className={`${styles.messageStatus} ${
-                        styles.messageStatusRead
-                      }`}
+                      className="material-symbols-outlined"
+                      style={{
+                        fontSize: "15px",
+                        color:
+                          msg.readBy && Object.keys(msg.readBy).length > 1
+                            ? "var(--primary)"
+                            : "inherit",
+                      }}
                     >
-                      <CheckCheck size={14} />
+                      done_all
                     </span>
                   )}
                 </div>
@@ -607,88 +717,10 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
             </div>
           );
         })}
-
-        {/* Typing indicator */}
-        {typingUsers.length > 0 && (
-          <div className={styles.messageRow + " " + styles.messageRowIncoming}>
-            <div className={styles.typingIndicator}>
-              <div className={styles.typingDot} />
-              <div className={styles.typingDot} />
-              <div className={styles.typingDot} />
-            </div>
-          </div>
-        )}
-
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Context Menu */}
-      {contextMenu && (
-        <div
-          className={styles.contextMenu}
-          style={{
-            left: contextMenu.x,
-            top: contextMenu.y,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div
-            className={styles.contextMenuItem}
-            onClick={() => handleReply(contextMenu.message)}
-          >
-            <Reply size={16} /> الرد
-          </div>
-          <div
-            className={styles.contextMenuItem}
-            onClick={() => handleCopy(contextMenu.message)}
-          >
-            <Copy size={16} /> نسخ النص
-          </div>
-          {/* Quick reactions */}
-          <div
-            style={{
-              display: "flex",
-              gap: 4,
-              padding: "6px 16px",
-              borderTop: "1px solid var(--divider)",
-              borderBottom: "1px solid var(--divider)",
-            }}
-          >
-            {["❤️", "😂", "👍", "😮", "😢", "🙏"].map((emoji) => (
-              <button
-                key={emoji}
-                style={{
-                  fontSize: "1.2rem",
-                  padding: "4px 6px",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  background: "none",
-                  border: "none",
-                }}
-                onClick={() => handleReaction(contextMenu.message, emoji)}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-          {contextMenu.message.senderId === userProfile?.uid && (
-            <div
-              className={styles.contextMenuItem}
-              onClick={() => handleDelete(contextMenu.message, true)}
-            >
-              <Trash2 size={16} /> الحذف لدى الجميع
-            </div>
-          )}
-          <div
-            className={`${styles.contextMenuItem} ${styles.contextMenuDanger}`}
-            onClick={() => handleDelete(contextMenu.message, false)}
-          >
-            <Trash2 size={16} /> الحذف لدي فقط
-          </div>
-        </div>
-      )}
-
-      {/* Input Area or Blocked Banner */}
+      {/* Message Input Area */}
       {isBlocked ? (
         <div className={styles.blockedBanner}>
           <div className={styles.blockedBannerContent}>
@@ -700,8 +732,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           </button>
         </div>
       ) : (
-        <div className={styles.inputArea}>
-          {/* Reply preview */}
+        <div className={styles.inputAreaBottom}>
+          {/* Reply preview if replying */}
           {replyTo && (
             <div
               style={{
@@ -709,9 +741,9 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                 bottom: "100%",
                 left: 0,
                 right: 0,
-                padding: "8px 16px",
-                background: "var(--bg-primary)",
-                borderTop: "1px solid var(--divider)",
+                padding: "8px 20px",
+                background: "var(--surface-container-low)",
+                borderTop: "1px solid var(--on-secondary)",
                 display: "flex",
                 alignItems: "center",
                 gap: 12,
@@ -724,19 +756,13 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                   paddingLeft: 8,
                 }}
               >
-                <div
-                  style={{
-                    fontSize: "0.78rem",
-                    fontWeight: 600,
-                    color: "var(--primary)",
-                  }}
-                >
+                <div style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--primary)" }}>
                   {replyTo.senderName}
                 </div>
                 <div
                   style={{
                     fontSize: "0.82rem",
-                    color: "var(--text-secondary)",
+                    color: "var(--outline)",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -751,50 +777,71 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
             </div>
           )}
 
-          <div style={{ position: "relative" }}>
+          {/* Attachment / Emoji buttons */}
+          <div className={styles.inputActionBtns}>
             <button
-              className="btn-icon"
-              title="إرفاق صورة مشفرة"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowAttach(!showAttach);
-              }}
+              type="button"
+              aria-label="Emoji"
+              className={styles.inputIconBtn}
+              title="رموز تعبيرية"
             >
-              <Paperclip size={20} color="var(--text-secondary)" />
+              <span className="material-symbols-outlined" style={{ fontSize: "22px" }}>
+                mood
+              </span>
             </button>
 
-            {showAttach && (
-              <div
-                className={styles.attachMenu}
-                onClick={(e) => e.stopPropagation()}
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                aria-label="Attach file"
+                className={styles.inputIconBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAttach(!showAttach);
+                }}
+                title="إرفاق صورة مشفرة"
               >
-                <label className={styles.attachItem} style={{ cursor: "pointer" }}>
-                  <div
-                    className={styles.attachItemIcon}
-                    style={{ background: "#7C4DFF" }}
-                  >
-                    <ImageIcon size={22} />
-                  </div>
-                  <span className={styles.attachItemLabel}>
-                    {uploading ? "جاري التشفير..." : "صورة (كود مشفر)"}
-                  </span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={handleImageUpload}
-                    disabled={uploading}
-                  />
-                </label>
-              </div>
-            )}
+                <span className="material-symbols-outlined" style={{ fontSize: "22px" }}>
+                  attach_file
+                </span>
+              </button>
+
+              {showAttach && (
+                <div
+                  className={styles.attachMenu}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <label className={styles.attachItem} style={{ cursor: "pointer" }}>
+                    <div
+                      className={styles.attachItemIcon}
+                      style={{ background: "var(--primary-container)" }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+                        image
+                      </span>
+                    </div>
+                    <span className={styles.attachItemLabel}>
+                      {uploading ? "جاري التشفير..." : "صورة (مشفرة Base64)"}
+                    </span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={handleImageUpload}
+                      disabled={uploading}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className={styles.inputBox}>
+          {/* Main Text Box */}
+          <div className={styles.inputTextBox}>
             <textarea
               ref={textareaRef}
-              placeholder="اكتب رسالتك هنا..."
+              placeholder="اكتب رسالة..."
               value={inputText}
               onChange={handleTextareaChange}
               onKeyDown={(e) => {
@@ -804,16 +851,23 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                 }
               }}
               rows={1}
+              className={styles.inputTextarea}
             />
           </div>
 
+          {/* Mic / Send Button */}
           <button
-            className={styles.sendBtn}
-            onClick={handleSend}
-            disabled={!inputText.trim()}
-            title="إرسال"
+            type="button"
+            aria-label={inputText.trim() ? "إرسال" : "تسجيل صوتي"}
+            className={`${styles.inputSendBtn} ${
+              inputText.trim() ? styles.inputSendBtnActive : ""
+            }`}
+            onClick={inputText.trim() ? handleSend : undefined}
+            title={inputText.trim() ? "إرسال" : "تسجيل صوتي"}
           >
-            <Send size={20} />
+            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+              {inputText.trim() ? "send" : "mic"}
+            </span>
           </button>
         </div>
       )}
@@ -834,6 +888,6 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
         onToggleBlock={handleToggleBlock}
         isSupport={isSupport}
       />
-    </div>
+    </section>
   );
 }
