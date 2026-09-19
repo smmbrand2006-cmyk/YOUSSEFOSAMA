@@ -18,6 +18,7 @@ import {
 import { Call } from "@/lib/types/call";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
+import { dispatchAppNotification, playNotificationChime } from "@/lib/utils/pwaNotifications";
 
 interface CallContextType {
   incomingCall: (Call & { id: string }) | null;
@@ -90,6 +91,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     const unsub = listenForIncomingCalls(userProfile.uid, (call) => {
       if (!isCallActive) {
         setIncomingCall(call);
+        if (call) {
+          playNotificationChime();
+          dispatchAppNotification({
+            title: "مكالمة واردة 📞",
+            body: `مكالمة ${call.type === "video" ? "فيديو" : "صوتية"} من ${call.callerName || "مستخدم"}`,
+            tag: `call-${call.id}`,
+            url: "/calls",
+          });
+        }
       }
     });
     return () => unsub();

@@ -5,13 +5,31 @@ import { ChatProvider } from "@/lib/contexts/ChatContext";
 import { CallProvider } from "@/lib/contexts/CallContext";
 import CallOverlay from "@/components/calls/CallOverlay";
 
+import PWAClientManager from "@/components/pwa/PWAClientManager";
+import type { Viewport } from "next";
+
 export const metadata: Metadata = {
-  title: "Youssef App | Premium Chat",
+  title: "Youssef App | يوسف شات",
   description:
-    "A premium messaging application with real-time chat, voice & video calls, and more.",
+    "تطبيق المحادثات والمكالمات الفورية عالي الأمان والمشفر بتقنية PWA.",
+  manifest: "/manifest.json",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Youssef App",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#6366F1",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 function AppProviders({ children }: { children: React.ReactNode }) {
@@ -21,6 +39,7 @@ function AppProviders({ children }: { children: React.ReactNode }) {
         <CallProvider>
           {children}
           <CallOverlay />
+          <PWAClientManager />
         </CallProvider>
       </ChatProvider>
     </AuthProvider>

@@ -5,6 +5,8 @@ import { useAuth } from "./AuthContext";
 import { listenToChats } from "@/lib/firebase/firestore";
 import { Chat } from "@/lib/types/chat";
 
+import { dispatchAppNotification, playNotificationChime } from "@/lib/utils/pwaNotifications";
+
 interface ChatContextType {
   chats: Chat[];
   activeChat: Chat | null;
@@ -24,6 +26,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const activeChatRef = useRef<Chat | null>(null);
+  const prevChatsRef = useRef<Chat[]>([]);
 
   useEffect(() => {
     activeChatRef.current = activeChat;
@@ -32,6 +35,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!userProfile) {
       setChats([]);
+      prevChatsRef.current = [];
       return;
     }
 
@@ -40,6 +44,35 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const filtered = newChats.filter(
         (c) => !c.isArchived?.[userProfile.uid]
       );
+
+      // Check for incoming new messages to notify
+      if (prevChatsRef.current.length > 0) {
+        filtered.forEach((chat) => {
+          const oldChat = prevChatsRef.current.find((c) => c.id === chat.id);
+          const hasNewMessage =
+            chat.lastMessage &&
+            chat.lastMessage.senderId !== userProfile.uid &&
+            (!oldChat ||
+              oldChat.lastMessage?.createdAt?.seconds !== chat.lastMessage.createdAt?.seconds ||
+              oldChat.lastMessage?.text !== chat.lastMessage.text);
+
+          if (hasNewMessage) {
+            const isWindowHidden = typeof document !== "undefined" && document.hidden;
+            const isDifferentChat = activeChatRef.current?.id !== chat.id;
+
+            if (isWindowHidden || isDifferentChat) {
+              playNotificationChime();
+              dispatchAppNotification({
+                title: chat.type === "direct" ? "رسالة جديدة 💬" : (chat.name || "رسالة جماعية 💬"),
+                body: chat.lastMessage?.text || "أرسل لك رسالة جديدة",
+                tag: `msg-${chat.id}`,
+                url: `/chat/${chat.id}`,
+              });
+            }
+          }
+        });
+      }
+      prevChatsRef.current = filtered;
       setChats(filtered);
 
       // Update active chat if it changed

@@ -1,0 +1,326 @@
+/* PWA & Mandatory Notification Styles */
+
+.notifOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(4, 7, 13, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.notifCard {
+  width: 100%;
+  max-width: 440px;
+  background: linear-gradient(145deg, #111827 0%, #0b0f19 100%);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 30px rgba(99, 102, 241, 0.2);
+  border-radius: 24px;
+  padding: 28px 24px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  color: #F3F4F6;
+  direction: rtl;
+}
+
+.notifGlow {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(99, 102, 241, 0) 70%);
+  pointer-events: none;
+}
+
+.notifIconWrap {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 18px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.25));
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
+  position: relative;
+}
+
+.notifPulseRing {
+  position: absolute;
+  inset: -4px;
+  border-radius: 26px;
+  border: 2px solid rgba(99, 102, 241, 0.6);
+  animation: ringPulse 2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  pointer-events: none;
+}
+
+.notifBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #F87171;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.notifTitle {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 10px;
+  color: #FFFFFF;
+}
+
+.notifDesc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #9CA3AF;
+  margin: 0 0 20px;
+}
+
+.notifFeatures {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 22px;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.notifFeatureItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #E5E7EB;
+}
+
+.notifFeatureIcon {
+  color: #818CF8;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.notifBtnPrimary {
+  width: 100%;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+  transition: all 0.2s ease;
+}
+
+.notifBtnPrimary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.notifBtnPrimary:active {
+  transform: translateY(1px);
+}
+
+.notifBlockedGuide {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 20px;
+  text-align: right;
+}
+
+.notifBlockedTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #F87171;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notifBlockedSteps {
+  font-size: 12.5px;
+  color: #D1D5DB;
+  line-height: 1.6;
+  margin: 0;
+  padding-right: 18px;
+}
+
+/* PWA Banner Styles */
+.pwaBannerContainer {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 500px;
+  z-index: 8000;
+  background: linear-gradient(135deg, #182234 0%, #0F172A 100%);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(99, 102, 241, 0.25);
+  border-radius: 20px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  direction: rtl;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pwaAppIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #6366F1;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.pwaBannerInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.pwaBannerTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0 0 2px;
+}
+
+.pwaBannerSub {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pwaBannerAction {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pwaInstallBtn {
+  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+  color: #FFFFFF;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  transition: transform 0.15s ease;
+}
+
+.pwaInstallBtn:hover {
+  transform: scale(1.03);
+}
+
+.pwaDismissBtn {
+  background: transparent;
+  border: none;
+  color: #6B7280;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease;
+}
+
+.pwaDismissBtn:hover {
+  color: #D1D5DB;
+}
+
+/* iOS Guide Sheet */
+.iosGuideBox {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px dashed rgba(99, 102, 241, 0.4);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #C7D2FE;
+  line-height: 1.5;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes ringPulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .pwaBannerContainer {
+    bottom: 74px;
+    width: calc(100% - 20px);
+    padding: 12px 14px;
+  }
+}

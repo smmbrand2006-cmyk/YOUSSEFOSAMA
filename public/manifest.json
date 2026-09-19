@@ -1,0 +1,63 @@
+{
+  "name": "Youssef App | يوسف شات",
+  "short_name": "Youssef App",
+  "description": "تطبيق المحادثات والمكالمات الفورية عالي الأمان والمشفر",
+  "start_url": "/chat",
+  "id": "/chat",
+  "display": "standalone",
+  "background_color": "#0B0E14",
+  "theme_color": "#6366F1",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "المحادثات",
+      "url": "/chat",
+      "description": "فتح قائمة المحادثات"
+    },
+    {
+      "name": "الاستوري (الحالات)",
+      "url": "/status",
+      "description": "عرض ونشر الحالات اليومية"
+    },
+    {
+      "name": "المكالمات",
+      "url": "/calls",
+      "description": "سجل ومكالمات الفيديو والصوت"
+    }
+  ],
+  "categories": ["social", "communication"]
+}
