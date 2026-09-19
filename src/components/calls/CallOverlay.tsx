@@ -24,6 +24,8 @@ export default function CallOverlay() {
     isCameraOff,
     callType,
     callDuration,
+    callStatus,
+    otherUser,
     acceptIncomingCall,
     rejectIncomingCall,
     hangUp,
@@ -33,6 +35,7 @@ export default function CallOverlay() {
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
   // Attach local stream to video element
   useEffect(() => {
@@ -41,15 +44,23 @@ export default function CallOverlay() {
     }
   }, [localStream]);
 
-  // Attach remote stream to video element
+  // Attach remote stream to video and audio elements (CRITICAL for hearing each other)
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
     }
+    if (remoteAudioRef.current && remoteStream) {
+      remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch((e) => {
+        console.warn("Audio autoplay blocked or waiting for user gesture:", e);
+      });
+    }
   }, [remoteStream]);
 
   const getInitials = (name: string) => {
+    if (!name) return "#";
     return name
+      .trim()
       .split(" ")
       .map((n) => n[0])
       .join("")
@@ -57,7 +68,7 @@ export default function CallOverlay() {
       .toUpperCase();
   };
 
-  // Incoming call overlay
+  // Incoming call overlay (Receiver sees this)
   if (incomingCall && !isCallActive) {
     return (
       <div className={styles.incomingCallOverlay}>
@@ -72,7 +83,7 @@ export default function CallOverlay() {
           {incomingCall.callerName}
         </div>
         <div className={styles.incomingCallType}>
-          Incoming {incomingCall.type} call...
+          مكالمة {incomingCall.type === "video" ? "فيديو" : "صوتية"} واردة...
         </div>
 
         <div className={styles.incomingCallActions}>
@@ -80,27 +91,31 @@ export default function CallOverlay() {
             <button
               className={`${styles.incomingCallBtnCircle} ${styles.incomingCallReject}`}
               onClick={rejectIncomingCall}
+              title="رفض"
             >
               <PhoneOff size={28} />
             </button>
-            <span className={styles.incomingCallLabel}>Decline</span>
+            <span className={styles.incomingCallLabel}>رفض</span>
           </div>
           <div className={styles.incomingCallBtn}>
             <button
               className={`${styles.incomingCallBtnCircle} ${styles.incomingCallAccept}`}
               onClick={acceptIncomingCall}
+              title="رد"
             >
               <Phone size={28} />
             </button>
-            <span className={styles.incomingCallLabel}>Accept</span>
+            <span className={styles.incomingCallLabel}>رد</span>
           </div>
         </div>
       </div>
     );
   }
 
-  // Active call overlay
+  // Active call overlay (Either Caller or Receiver during call)
   if (!isCallActive) return null;
+
+  const displayName = otherUser?.name || "مكالمة";
 
   return (
     <div
@@ -108,6 +123,9 @@ export default function CallOverlay() {
         callType === "video" ? styles.callOverlayVideo : ""
       }`}
     >
+      {/* 🔊 Dedicated Remote Audio element (Ensures audio is always heard in voice & video calls) */}
+      <audio ref={remoteAudioRef} autoPlay playsInline />
+
       {callType === "video" ? (
         <>
           {/* Remote video (fullscreen) */}
@@ -129,17 +147,34 @@ export default function CallOverlay() {
               muted
             />
           </div>
+
+          <div className={styles.videoCallHeader}>
+            <div className={styles.videoCallName}>{displayName}</div>
+            <div className={styles.videoCallDuration}>
+              {callStatus === "ringing"
+                ? "يرن الآن... 🔔"
+                : formatDuration(callDuration)}
+            </div>
+          </div>
         </>
       ) : (
         /* Audio call display */
         <div className={styles.callInfo}>
           <div className={styles.callAvatar}>
-            {/* Show remote user avatar */}
-            <Volume2 size={60} />
+            {otherUser?.photo ? (
+              <img src={otherUser.photo} alt="" />
+            ) : (
+              getInitials(displayName)
+            )}
           </div>
-          <div className={styles.callName}>Audio Call</div>
+          <div className={styles.callName}>{displayName}</div>
+          <div className={styles.callStatus}>
+            {callStatus === "ringing" ? "يرن الآن... 🔔" : "متصل 🟢"}
+          </div>
           <div className={styles.callDuration}>
-            {formatDuration(callDuration)}
+            {callStatus === "ringing"
+              ? "في انتظار الرد..."
+              : formatDuration(callDuration)}
           </div>
         </div>
       )}
@@ -151,7 +186,7 @@ export default function CallOverlay() {
             isMuted ? styles.callControlBtnActive : ""
           }`}
           onClick={toggleMute}
-          title={isMuted ? "Unmute" : "Mute"}
+          title={isMuted ? "إلغاء كتم الصوت" : "كتم الصوت"}
         >
           {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
         </button>
@@ -159,7 +194,7 @@ export default function CallOverlay() {
         <button
           className={`${styles.callControlBtn} ${styles.callControlBtnEnd}`}
           onClick={hangUp}
-          title="End call"
+          title="إنهاء المكالمة"
         >
           <PhoneOff size={28} />
         </button>
@@ -170,7 +205,7 @@ export default function CallOverlay() {
               isCameraOff ? styles.callControlBtnActive : ""
             }`}
             onClick={toggleCamera}
-            title={isCameraOff ? "Turn on camera" : "Turn off camera"}
+            title={isCameraOff ? "تشغيل الكاميرا" : "إيقاف الكاميرا"}
           >
             {isCameraOff ? <VideoOff size={24} /> : <Video size={24} />}
           </button>
