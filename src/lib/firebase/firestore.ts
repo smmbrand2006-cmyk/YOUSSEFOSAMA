@@ -904,3 +904,125 @@ export async function unblockUser(currentUid: string, targetUid: string): Promis
   });
 }
 
+// ==================== STATUS / STORY OPERATIONS ====================
+
+export interface StatusViewer {
+  uid: string;
+  userName: string;
+  userAvatar?: string;
+  viewedAt: number;
+}
+
+export interface UserStatus {
+  id: string;
+  uid: string;
+  userName: string;
+  userCode: string;
+  userAvatar?: string;
+  type: "text" | "image";
+  content: string;
+  bgColor?: string;
+  createdAt: any;
+  expiresAt: number;
+  viewers: StatusViewer[];
+}
+
+/**
+ * Publish a new story/status (lasts 24 hours)
+ */
+export async function publishStatus(data: {
+  uid: string;
+  userName: string;
+  userCode: string;
+  userAvatar?: string;
+  type: "text" | "image";
+  content: string;
+  bgColor?: string;
+}): Promise<string> {
+  const now = Date.now();
+  const expiresAt = now + 24 * 60 * 60 * 1000; // 24 hours from now
+
+  const statusDoc = await addDoc(collection(db, "statuses"), {
+    ...data,
+    viewers: [],
+    expiresAt,
+    clientTimestamp: now,
+    createdAt: serverTimestamp(),
+  });
+
+  return statusDoc.id;
+}
+
+/**
+ * Listen to all active statuses (within 24 hours)
+ */
+export function listenToActiveStatuses(
+  callback: (statuses: UserStatus[]) => void
+) {
+  const now = Date.now();
+  const q = query(
+    collection(db, "statuses"),
+    where("expiresAt", ">", now)
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: UserStatus[] = [];
+      snapshot.forEach((d) => {
+        list.push({ id: d.id, ...d.data() } as UserStatus);
+      });
+      // Sort newest first
+      list.sort((a, b) => {
+        const timeA = (a.createdAt as any)?.toMillis?.() || (a as any).clientTimestamp || 0;
+        const timeB = (b.createdAt as any)?.toMillis?.() || (b as any).clientTimestamp || 0;
+        return timeB - timeA;
+      });
+      callback(list);
+    },
+    (err) => {
+      console.warn("listenToActiveStatuses note:", err);
+    }
+  );
+}
+
+/**
+ * Record that a user viewed a status (without duplicate entries)
+ */
+export async function recordStatusView(
+  statusId: string,
+  viewer: { uid: string; userName: string; userAvatar?: string }
+): Promise<void> {
+  try {
+    const statusRef = doc(db, "statuses", statusId);
+    const snap = await getDoc(statusRef);
+    if (!snap.exists()) return;
+
+    const data = snap.data() as UserStatus;
+    // Don't record if viewer is the creator or already in viewers
+    if (data.uid === viewer.uid) return;
+    const alreadyViewed = (data.viewers || []).some((v) => v.uid === viewer.uid);
+    if (alreadyViewed) return;
+
+    const newViewer: StatusViewer = {
+      uid: viewer.uid,
+      userName: viewer.userName,
+      userAvatar: viewer.userAvatar || "",
+      viewedAt: Date.now(),
+    };
+
+    await updateDoc(statusRef, {
+      viewers: arrayUnion(newViewer),
+    });
+  } catch (err) {
+    console.warn("Failed to record status view:", err);
+  }
+}
+
+/**
+ * Delete a user's own status
+ */
+export async function deleteStatus(statusId: string): Promise<void> {
+  await deleteDoc(doc(db, "statuses", statusId));
+}
+

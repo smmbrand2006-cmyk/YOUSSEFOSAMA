@@ -4,7 +4,16 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useChats } from "@/lib/contexts/ChatContext";
-import { sendMessage, getOrCreateDirectChat } from "@/lib/firebase/firestore";
+import {
+  sendMessage,
+  getOrCreateDirectChat,
+  publishStatus,
+  listenToActiveStatuses,
+  recordStatusView,
+  deleteStatus,
+  UserStatus,
+} from "@/lib/firebase/firestore";
+import { encodeImageToBase64 } from "@/lib/utils/imageEncoder";
 import AppNavRail from "@/components/chat/AppNavRail";
 import MobileBottomNav from "@/components/chat/MobileBottomNav";
 import {
@@ -16,23 +25,14 @@ import {
   Plus,
   X,
   Send,
-  Sparkles,
-  Smile,
+  Eye,
+  Trash2,
   ChevronRight,
   ChevronLeft,
+  Users,
+  Clock,
 } from "lucide-react";
 import styles from "@/styles/chat.module.css";
-
-interface StatusItem {
-  id: string;
-  userName: string;
-  userCode: string;
-  isMine: boolean;
-  type: "text" | "image";
-  content: string;
-  bgColor?: string;
-  timestamp: number;
-}
 
 const BG_COLORS = [
   "#005c4b", // WhatsApp Green
@@ -44,13 +44,44 @@ const BG_COLORS = [
   "#047857", // Emerald
 ];
 
+function formatViewerTime(viewedAt: number): string {
+  if (!viewedAt) return "الآن";
+  const diffMs = Date.now() - viewedAt;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  if (diffMin < 1) return "الآن";
+  if (diffMin < 60) return `منذ ${diffMin} دقيقة`;
+  if (diffHours < 24) return `منذ ${diffHours} ساعة`;
+  return new Date(viewedAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatStatusAge(timestamp: any): string {
+  if (!timestamp) return "الآن";
+  let timeMs = 0;
+  if (typeof timestamp?.toMillis === "function") {
+    timeMs = timestamp.toMillis();
+  } else if (typeof timestamp === "number") {
+    timeMs = timestamp;
+  } else {
+    timeMs = Date.now();
+  }
+  const diffMs = Date.now() - timeMs;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  if (diffMin < 1) return "الآن";
+  if (diffMin < 60) return `منذ ${diffMin} دقيقة`;
+  if (diffHours < 24) return `منذ ${diffHours} ساعة`;
+  return "منذ يوم";
+}
+
 export default function StatusPage() {
   const router = useRouter();
   const { userProfile, isAuthenticated, loading } = useAuth();
   const { chats } = useChats();
 
-  const [statuses, setStatuses] = useState<StatusItem[]>([]);
+  const [statuses, setStatuses] = useState<UserStatus[]>([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
+  const [activeStoryList, setActiveStoryList] = useState<UserStatus[]>([]);
   const [isCreatingText, setIsCreatingText] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [selectedBg, setSelectedBg] = useState(BG_COLORS[0]);
@@ -58,52 +89,45 @@ export default function StatusPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showViewersSheet, setShowViewersSheet] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load statuses from localStorage (strictly real, purge all mock fake statuses)
+  // Real-time Firestore synchronization for active statuses (24h validity)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("youssef_app_statuses");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          const clean = Array.isArray(parsed)
-            ? parsed.filter(
-                (s: any) =>
-                  !["status_support", "status_youssef", "status_malak"].includes(s.id) &&
-                  s.userName !== "Eng:Youssef Mansour ✨" &&
-                  s.userName !== "Malak Osama 🌸" &&
-                  s.userName !== "الدعم الفني الرسمي (#123) 🎧"
-              )
-            : [];
-          setStatuses(clean);
-          localStorage.setItem("youssef_app_statuses", JSON.stringify(clean));
-        } catch {
-          setStatuses([]);
-          localStorage.removeItem("youssef_app_statuses");
-        }
-      } else {
-        setStatuses([]);
-      }
-    }
-  }, []);
+    if (!userProfile) return;
+    const unsub = listenToActiveStatuses((fetchedList) => {
+      setStatuses(fetchedList);
+    });
+    return () => unsub();
+  }, [userProfile?.uid]);
 
-  const saveStatuses = (newStatuses: StatusItem[]) => {
-    setStatuses(newStatuses);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("youssef_app_statuses", JSON.stringify(newStatuses));
-    }
-  };
-
-  // Story Viewer Timer (6s per story)
+  // Handle automatic status view recording
   useEffect(() => {
-    if (activeStoryIndex === null) return;
+    if (activeStoryIndex === null || !activeStoryList[activeStoryIndex] || !userProfile) return;
+    const currentStory = activeStoryList[activeStoryIndex];
+
+    if (currentStory.uid !== userProfile.uid) {
+      recordStatusView(currentStory.id, {
+        uid: userProfile.uid,
+        userName: userProfile.displayName || "مستخدم",
+        userAvatar: userProfile.avatar || "",
+      });
+    }
+  }, [activeStoryIndex, activeStoryList, userProfile?.uid]);
+
+  // Story Viewer Timer (6 seconds per story, paused while viewers sheet is open)
+  useEffect(() => {
+    if (activeStoryIndex === null || showViewersSheet) {
+      if (storyTimerRef.current) clearTimeout(storyTimerRef.current);
+      return;
+    }
 
     if (storyTimerRef.current) clearTimeout(storyTimerRef.current);
     storyTimerRef.current = setTimeout(() => {
-      if (activeStoryIndex < statuses.length - 1) {
+      if (activeStoryIndex < activeStoryList.length - 1) {
         setActiveStoryIndex((prev) => (prev !== null ? prev + 1 : null));
       } else {
         setActiveStoryIndex(null);
@@ -113,7 +137,7 @@ export default function StatusPage() {
     return () => {
       if (storyTimerRef.current) clearTimeout(storyTimerRef.current);
     };
-  }, [activeStoryIndex, statuses.length]);
+  }, [activeStoryIndex, activeStoryList.length, showViewersSheet]);
 
   if (loading) return null;
   if (!isAuthenticated) {
@@ -121,89 +145,109 @@ export default function StatusPage() {
     return null;
   }
 
-  const myStatuses = statuses.filter((s) => s.isMine);
-  const otherStatuses = statuses.filter((s) => !s.isMine);
+  const myStatuses = statuses.filter((s) => s.uid === userProfile?.uid);
+  const otherStatuses = statuses.filter((s) => s.uid !== userProfile?.uid);
 
-  const handlePostTextStatus = () => {
-    if (!statusText.trim() || !userProfile) return;
-    const newStatus: StatusItem = {
-      id: "status_" + Date.now(),
-      userName: userProfile.displayName || "أنا",
-      userCode: userProfile.userCode || "",
-      isMine: true,
-      type: "text",
-      content: statusText.trim(),
-      bgColor: selectedBg,
-      timestamp: Date.now(),
-    };
-    saveStatuses([newStatus, ...statuses]);
-    setStatusText("");
-    setIsCreatingText(false);
+  // Filtered lists for search
+  const filteredOtherStatuses = searchQuery.trim()
+    ? otherStatuses.filter(
+        (s) =>
+          s.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          s.content.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : otherStatuses;
+
+  const handlePostTextStatus = async () => {
+    if (!statusText.trim() || !userProfile || publishing) return;
+    setPublishing(true);
+    try {
+      await publishStatus({
+        uid: userProfile.uid,
+        userName: userProfile.displayName || userProfile.userCode,
+        userCode: userProfile.userCode,
+        userAvatar: userProfile.avatar || "",
+        type: "text",
+        content: statusText.trim(),
+        bgColor: selectedBg,
+      });
+      setStatusText("");
+      setIsCreatingText(false);
+    } catch (err) {
+      console.error("Failed to publish status:", err);
+      alert("تعذر نشر الحالة، يرجى المحاولة مرة أخرى.");
+    } finally {
+      setPublishing(false);
+    }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !userProfile) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      const newStatus: StatusItem = {
-        id: "status_" + Date.now(),
-        userName: userProfile.displayName || "أنا",
-        userCode: userProfile.userCode || "",
-        isMine: true,
+    if (!file || !userProfile || publishing) return;
+    setPublishing(true);
+    try {
+      const base64 = await encodeImageToBase64(file, 640, 0.7);
+      await publishStatus({
+        uid: userProfile.uid,
+        userName: userProfile.displayName || userProfile.userCode,
+        userCode: userProfile.userCode,
+        userAvatar: userProfile.avatar || "",
         type: "image",
         content: base64,
-        timestamp: Date.now(),
-      };
-      saveStatuses([newStatus, ...statuses]);
-    };
-    reader.readAsDataURL(file);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+      });
+    } catch (err) {
+      console.error("Failed to upload status image:", err);
+      alert("فشل معالجة ونشر صورة الحالة.");
+    } finally {
+      setPublishing(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleSendStoryReply = async () => {
     if (!storyReply.trim() || activeStoryIndex === null || !userProfile) return;
-    const currentStory = statuses[activeStoryIndex];
-    const replyText = `الرد على الحالة: "${currentStory.content.substring(0, 40)}..."\n\n${storyReply.trim()}`;
+    const currentStory = activeStoryList[activeStoryIndex];
+    const replyText = `رد على الحالة: "${currentStory.content.substring(0, 40)}..."\n\n${storyReply.trim()}`;
     setStoryReply("");
 
     try {
-      // Find or create direct chat with the status owner
       const targetUser = {
-        uid: currentStory.userCode === "123" ? "support_official_123" : currentStory.userCode,
+        uid: currentStory.uid,
         displayName: currentStory.userName,
         userCode: currentStory.userCode,
       } as any;
       const chatId = await getOrCreateDirectChat(userProfile, targetUser);
       await sendMessage(chatId, userProfile.uid, userProfile.displayName, replyText);
-      alert("تم إرسال ردك في المحادثة بنجاح! 🚀");
+      alert("تم إرسال الرد في المحادثة بنجاح! ✉️");
     } catch (err) {
       console.error("Failed to send story reply:", err);
-      alert("تم حفظ الرد!");
+      alert("تعذر إرسال الرد.");
     }
   };
 
-  const formatStatusTime = (ms: number) => {
-    const diffMin = Math.floor((Date.now() - ms) / (1000 * 60));
-    if (diffMin < 1) return "الآن";
-    if (diffMin < 60) return `منذ ${diffMin} دقيقة`;
-    const diffHours = Math.floor(diffMin / 60);
-    if (diffHours < 24) return `منذ ${diffHours} ساعة`;
-    return "أمس";
+  const handleDeleteCurrentStatus = async () => {
+    if (activeStoryIndex === null || !activeStoryList[activeStoryIndex]) return;
+    const currentStory = activeStoryList[activeStoryIndex];
+    if (confirm("هل تريد بالتأكيد حذف هذه الحالة نهائياً؟")) {
+      try {
+        await deleteStatus(currentStory.id);
+        setActiveStoryIndex(null);
+        setShowViewersSheet(false);
+      } catch (err) {
+        console.error("Failed to delete status:", err);
+        alert("تعذر حذف الحالة.");
+      }
+    }
   };
 
-  const getInitials = (name?: string) => {
-    if (!name || !name.trim()) return "U";
-    return name
-      .trim()
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .substring(0, 2)
-      .toUpperCase();
+  const openStoryViewer = (list: UserStatus[], startIndex: number = 0) => {
+    setActiveStoryList(list);
+    setActiveStoryIndex(startIndex);
+    setShowViewersSheet(false);
   };
+
+  const currentStory = activeStoryIndex !== null ? activeStoryList[activeStoryIndex] : null;
+  const isMine = currentStory?.uid === userProfile?.uid;
+  const viewersList = currentStory?.viewers || [];
 
   return (
     <div className={styles.chatLayout}>
@@ -250,9 +294,9 @@ export default function StatusPage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              background: "#0c1317",
+              background: "#111b21",
               borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
-              flexShrink: 0,
+              zIndex: 20,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -264,23 +308,24 @@ export default function StatusPage() {
                   border: "none",
                   color: "#aebac1",
                   cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
                   padding: "6px",
                   borderRadius: "50%",
-                  display: "flex",
                 }}
-                title="الرجوع إلى المحادثات"
+                title="رجوع للمحادثات"
               >
                 <ArrowLeft size={22} />
               </button>
               <h1
                 style={{
-                  fontSize: "1.35rem",
-                  fontWeight: "700",
+                  fontSize: "1.25rem",
+                  fontWeight: 600,
                   color: "#e9edef",
                   margin: 0,
                 }}
               >
-                Updates
+                الحالات (Updates)
               </h1>
             </div>
 
@@ -291,7 +336,7 @@ export default function StatusPage() {
                 style={{
                   background: "none",
                   border: "none",
-                  color: showSearch ? "#00a884" : "#aebac1",
+                  color: "#aebac1",
                   cursor: "pointer",
                   padding: "8px",
                   borderRadius: "50%",
@@ -304,6 +349,7 @@ export default function StatusPage() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={publishing}
                 style={{
                   background: "none",
                   border: "none",
@@ -312,8 +358,9 @@ export default function StatusPage() {
                   padding: "8px",
                   borderRadius: "50%",
                   display: "flex",
+                  opacity: publishing ? 0.5 : 1,
                 }}
-                title="التقاط أو رفع صورة"
+                title="رفع صورة للحالة"
               >
                 <Camera size={22} />
               </button>
@@ -353,7 +400,7 @@ export default function StatusPage() {
                       type="button"
                       onClick={() => {
                         setShowMenu(false);
-                        alert("خصوصية الحالة: حالتك مرئية لجميع جهات اتصالك المسجلة 🟢");
+                        alert("خصوصية الحالة: حالتك مشفرة ومرئية لجميع الأصدقاء 🟢");
                       }}
                       style={{
                         display: "flex",
@@ -370,12 +417,8 @@ export default function StatusPage() {
                         textAlign: "right",
                       }}
                     >
-                      <span className="material-symbols-outlined" style={{ fontSize: "18px", color: "var(--primary)" }}>
-                        lock
-                      </span>
-                      خصوصية الحالة (Privacy)
+                      <span>خصوصية الحالة (Privacy)</span>
                     </button>
-
                     <button
                       type="button"
                       onClick={() => {
@@ -397,10 +440,7 @@ export default function StatusPage() {
                         textAlign: "right",
                       }}
                     >
-                      <span className="material-symbols-outlined" style={{ fontSize: "18px", color: "var(--primary)" }}>
-                        settings
-                      </span>
-                      الإعدادات (Settings)
+                      <span>الإعدادات (Settings)</span>
                     </button>
                   </div>
                 )}
@@ -453,295 +493,7 @@ export default function StatusPage() {
             </div>
           )}
 
-          {/* Scrollable Body */}
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              paddingBottom: "90px",
-            }}
-          >
-            {/* Status Section Title */}
-            <div
-              style={{
-                padding: "18px 20px 8px 20px",
-                fontSize: "1.05rem",
-                fontWeight: "700",
-                color: "#e9edef",
-              }}
-            >
-              Status
-            </div>
-
-            {/* My Status Row */}
-            <div
-              onClick={() => {
-                if (myStatuses.length > 0) {
-                  const idx = statuses.findIndex((s) => s.id === myStatuses[0].id);
-                  setActiveStoryIndex(idx >= 0 ? idx : 0);
-                } else {
-                  setIsCreatingText(true);
-                }
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                padding: "12px 20px",
-                gap: "16px",
-                cursor: "pointer",
-                transition: "background 0.15s ease",
-              }}
-              onMouseEnter={(e) =>
-                ((e.currentTarget as HTMLElement).style.background = "#182229")
-              }
-              onMouseLeave={(e) =>
-                ((e.currentTarget as HTMLElement).style.background = "transparent")
-              }
-            >
-              <div style={{ position: "relative" }}>
-                <div
-                  style={{
-                    width: "52px",
-                    height: "52px",
-                    borderRadius: "50%",
-                    border:
-                      myStatuses.length > 0
-                        ? "2px solid #00a884"
-                        : "2px solid rgba(255, 255, 255, 0.15)",
-                    padding: "2px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      borderRadius: "50%",
-                      background: "#222e35",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#00a884",
-                      fontWeight: "bold",
-                      fontSize: "1.1rem",
-                    }}
-                  >
-                    {getInitials(userProfile?.displayName)}
-                  </div>
-                </div>
-
-                {myStatuses.length === 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: 0,
-                      right: 0,
-                      width: "20px",
-                      height: "20px",
-                      borderRadius: "50%",
-                      background: "#00a884",
-                      border: "2px solid #0c1317",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#111b21",
-                    }}
-                  >
-                    <Plus size={14} strokeWidth={3} />
-                  </div>
-                )}
-              </div>
-
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "3px" }}>
-                <span
-                  style={{
-                    color: "#e9edef",
-                    fontSize: "1rem",
-                    fontWeight: "600",
-                  }}
-                >
-                  My status
-                </span>
-                <span
-                  style={{
-                    color: "#8696a0",
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  {myStatuses.length > 0
-                    ? formatStatusTime(myStatuses[0].timestamp)
-                    : "Tap to add status update"}
-                </span>
-              </div>
-            </div>
-
-            {/* Recent Updates Header */}
-            <div
-              style={{
-                padding: "20px 20px 8px 20px",
-                fontSize: "0.85rem",
-                fontWeight: "600",
-                color: "#8696a0",
-                textTransform: "uppercase",
-                letterSpacing: "0.5px",
-              }}
-            >
-              Recent updates
-            </div>
-
-            {/* Stories List */}
-            {otherStatuses.length === 0 ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "36px 20px",
-                  color: "#8696a0",
-                  fontSize: "0.9rem",
-                }}
-              >
-                لا توجد حالات حديثة من جهات اتصالك حالياً
-              </div>
-            ) : (
-              otherStatuses.map((item) => {
-                const globalIdx = statuses.findIndex((s) => s.id === item.id);
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => setActiveStoryIndex(globalIdx >= 0 ? globalIdx : 0)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      padding: "12px 20px",
-                      gap: "16px",
-                      cursor: "pointer",
-                      transition: "background 0.15s ease",
-                    }}
-                    onMouseEnter={(e) =>
-                      ((e.currentTarget as HTMLElement).style.background = "#182229")
-                    }
-                    onMouseLeave={(e) =>
-                      ((e.currentTarget as HTMLElement).style.background = "transparent")
-                    }
-                  >
-                  <div
-                    style={{
-                      width: "52px",
-                      height: "52px",
-                      borderRadius: "50%",
-                      border: "2px solid #00a884",
-                      padding: "2px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        borderRadius: "50%",
-                        background: item.bgColor || "#222e35",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#fff",
-                        fontWeight: "bold",
-                        fontSize: "1rem",
-                      }}
-                    >
-                      {getInitials(item.userName)}
-                    </div>
-                  </div>
-
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "3px" }}>
-                    <span
-                      style={{
-                        color: "#e9edef",
-                        fontSize: "0.98rem",
-                        fontWeight: "600",
-                      }}
-                    >
-                      {item.userName}
-                    </span>
-                    <span
-                      style={{
-                        color: "#8696a0",
-                        fontSize: "0.85rem",
-                      }}
-                    >
-                      {formatStatusTime(item.timestamp)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-          {/* Floating Buttons: Pencil for text & Camera for photo */}
-          <div
-            style={{
-              position: "absolute",
-              bottom: "76px",
-              right: "24px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "14px",
-              zIndex: 30,
-            }}
-          >
-            {/* Pencil Button (Text Status) */}
-            <button
-              type="button"
-              onClick={() => setIsCreatingText(true)}
-              style={{
-                width: "44px",
-                height: "44px",
-                borderRadius: "14px",
-                background: "#202c33",
-                border: "none",
-                color: "#aebac1",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0 6px 16px rgba(0, 0, 0, 0.4)",
-                cursor: "pointer",
-                transition: "transform 0.15s ease",
-              }}
-              title="نشر حالة نصية"
-            >
-              <Edit2 size={20} />
-            </button>
-
-            {/* Camera Button (Photo Status) */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                width: "56px",
-                height: "56px",
-                borderRadius: "16px",
-                background: "#00a884",
-                border: "none",
-                color: "#111b21",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0 8px 24px rgba(0, 168, 132, 0.4)",
-                cursor: "pointer",
-                transition: "transform 0.15s ease",
-              }}
-              title="التقاط أو نشر صورة"
-            >
-              <Camera size={26} strokeWidth={2.5} />
-            </button>
-          </div>
-
-          {/* Hidden File Input for Status Photo */}
+          {/* Hidden Image Input */}
           <input
             ref={fileInputRef}
             type="file"
@@ -750,34 +502,336 @@ export default function StatusPage() {
             onChange={handlePhotoUpload}
           />
 
-          {/* Fullscreen Story Viewer */}
-          {activeStoryIndex !== null && statuses[activeStoryIndex] && (
+          {/* Main Status List Scrollable Area */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              paddingBottom: "80px",
+            }}
+          >
+            {/* 1. My Status Section */}
+            <div
+              style={{
+                padding: "16px 20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                background: "#111b21",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "16px",
+                  flex: 1,
+                  cursor: "pointer",
+                }}
+                onClick={() => {
+                  if (myStatuses.length > 0) {
+                    openStoryViewer(myStatuses, 0);
+                  } else {
+                    setIsCreatingText(true);
+                  }
+                }}
+              >
+                <div style={{ position: "relative" }}>
+                  <div
+                    style={{
+                      width: "52px",
+                      height: "52px",
+                      borderRadius: "50%",
+                      background: myStatuses.length > 0 ? "transparent" : "#202c33",
+                      border: myStatuses.length > 0 ? "2.5px solid #00a884" : "1px solid rgba(255, 255, 255, 0.1)",
+                      padding: myStatuses.length > 0 ? "2px" : "0",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#aebac1",
+                      fontWeight: 600,
+                      fontSize: "1.1rem",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {myStatuses.length > 0 && myStatuses[0].type === "image" ? (
+                      <img
+                        src={myStatuses[0].content}
+                        alt="My status"
+                        style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
+                      />
+                    ) : myStatuses.length > 0 && myStatuses[0].type === "text" ? (
+                      <div
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          borderRadius: "50%",
+                          background: myStatuses[0].bgColor || "#005c4b",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#fff",
+                          fontSize: "0.75rem",
+                          padding: "2px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {myStatuses[0].content.substring(0, 10)}
+                      </div>
+                    ) : (
+                      userProfile?.displayName?.[0] || "أنا"
+                    )}
+                  </div>
+
+                  {myStatuses.length === 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: 0,
+                        right: 0,
+                        width: "20px",
+                        height: "20px",
+                        borderRadius: "50%",
+                        background: "#00a884",
+                        color: "#111b21",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 0 0 2px #111b21",
+                      }}
+                    >
+                      <Plus size={14} strokeWidth={3} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <span style={{ fontSize: "1rem", fontWeight: 600, color: "#e9edef" }}>
+                    حالتي
+                  </span>
+                  <span style={{ fontSize: "0.82rem", color: "#8696a0", display: "flex", alignItems: "center", gap: "6px" }}>
+                    {myStatuses.length > 0 ? (
+                      <>
+                        <span>{formatStatusAge(myStatuses[0].createdAt)}</span>
+                        <span>•</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#00a884" }}>
+                          <Eye size={13} />
+                          {myStatuses[0].viewers?.length || 0} مشاهدة
+                        </span>
+                      </>
+                    ) : (
+                      "انقر لإضافة تحديث لحالتك"
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingText(true)}
+                  style={{
+                    width: "38px",
+                    height: "38px",
+                    borderRadius: "50%",
+                    background: "#202c33",
+                    border: "none",
+                    color: "#aebac1",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                  title="كتابة حالة نصية"
+                >
+                  <Edit2 size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    width: "38px",
+                    height: "38px",
+                    borderRadius: "50%",
+                    background: "#202c33",
+                    border: "none",
+                    color: "#aebac1",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                  title="رفع صورة للحالة"
+                >
+                  <Camera size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Recent Updates Header */}
+            <div
+              style={{
+                padding: "16px 20px 8px",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                color: "#8696a0",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+              }}
+            >
+              آخر التحديثات ({filteredOtherStatuses.length})
+            </div>
+
+            {/* 3. Other Users Statuses List */}
+            {filteredOtherStatuses.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {filteredOtherStatuses.map((item, idx) => {
+                  const hasViewed = (item.viewers || []).some((v) => v.uid === userProfile?.uid);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => openStoryViewer(filteredOtherStatuses, idx)}
+                      style={{
+                        padding: "12px 20px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "16px",
+                        cursor: "pointer",
+                        transition: "background 0.15s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#182229";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "52px",
+                          height: "52px",
+                          borderRadius: "50%",
+                          border: hasViewed ? "2px solid #8696a0" : "2.5px solid #00a884",
+                          padding: "2px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          overflow: "hidden",
+                        }}
+                      >
+                        {item.type === "image" ? (
+                          <img
+                            src={item.content}
+                            alt={item.userName}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              borderRadius: "50%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              borderRadius: "50%",
+                              background: item.bgColor || "#005c4b",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#fff",
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              padding: "2px",
+                              textAlign: "center",
+                            }}
+                          >
+                            {item.userName?.[0] || "م"}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "1rem", fontWeight: 500, color: "#e9edef" }}>
+                          {item.userName}
+                        </span>
+                        <span style={{ fontSize: "0.82rem", color: "#8696a0" }}>
+                          {formatStatusAge(item.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: "40px 20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textAlign: "center",
+                  gap: "12px",
+                  color: "#8696a0",
+                }}
+              >
+                <div
+                  style={{
+                    width: "60px",
+                    height: "60px",
+                    borderRadius: "50%",
+                    background: "#182229",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#00a884",
+                  }}
+                >
+                  <Users size={28} />
+                </div>
+                <div style={{ fontSize: "0.95rem", fontWeight: 500, color: "#e9edef" }}>
+                  لا توجد تحديثات جديدة حالياً
+                </div>
+                <div style={{ fontSize: "0.82rem", maxWidth: "280px", lineHeight: "1.4" }}>
+                  ستظهر حالات أصدقائك وجهات اتصالك المسجلة هنا فور قيامهم بنشر أي حالة جديدة.
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ==================== FULLSCREEN STORY VIEWER ==================== */}
+          {activeStoryIndex !== null && currentStory && (
             <div
               style={{
                 position: "fixed",
                 inset: 0,
-                zIndex: 200,
-                background: statuses[activeStoryIndex].bgColor || "#0b141a",
+                zIndex: 100,
+                background: currentStory.type === "text" ? currentStory.bgColor || "#005c4b" : "#000",
                 display: "flex",
                 flexDirection: "column",
                 animation: "fadeIn 0.2s ease",
               }}
             >
-              {/* Segmented Progress Bar */}
+              {/* Top Progress Bars */}
               <div
                 style={{
                   display: "flex",
                   gap: "4px",
-                  padding: "16px 16px 8px 16px",
+                  padding: "12px 16px 8px",
+                  zIndex: 20,
                 }}
               >
-                {statuses.map((_, i) => (
+                {activeStoryList.map((_, idx) => (
                   <div
-                    key={i}
+                    key={idx}
                     style={{
                       flex: 1,
                       height: "3px",
-                      background: "rgba(255,255,255,0.3)",
+                      background: "rgba(255, 255, 255, 0.3)",
                       borderRadius: "2px",
                       overflow: "hidden",
                     }}
@@ -787,66 +841,88 @@ export default function StatusPage() {
                         height: "100%",
                         background: "#fff",
                         width:
-                          i < activeStoryIndex
+                          idx < activeStoryIndex
                             ? "100%"
-                            : i === activeStoryIndex
+                            : idx === activeStoryIndex && !showViewersSheet
                             ? "100%"
                             : "0%",
-                        transition: i === activeStoryIndex ? "width 6s linear" : "none",
+                        transition: idx === activeStoryIndex && !showViewersSheet ? "width 6s linear" : "none",
                       }}
                     />
                   </div>
                 ))}
               </div>
 
-              {/* Story Top Bar */}
+              {/* Story Header */}
               <div
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   padding: "8px 16px",
-                  color: "#fff",
+                  zIndex: 20,
+                  background: "linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => setActiveStoryIndex(null)}
                     style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "50%",
-                      background: "rgba(255,255,255,0.2)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: "bold",
+                      background: "none",
+                      border: "none",
+                      color: "#fff",
+                      cursor: "pointer",
+                      padding: "4px",
                     }}
                   >
-                    {getInitials(statuses[activeStoryIndex].userName)}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: "600", fontSize: "1rem" }}>
-                      {statuses[activeStoryIndex].userName}
-                    </div>
-                    <div style={{ fontSize: "0.78rem", opacity: 0.85 }}>
-                      {formatStatusTime(statuses[activeStoryIndex].timestamp)}
-                    </div>
+                    <ArrowLeft size={22} />
+                  </button>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ color: "#fff", fontWeight: 600, fontSize: "0.95rem" }}>
+                      {isMine ? "حالتي" : currentStory.userName}
+                    </span>
+                    <span style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.75rem" }}>
+                      {formatStatusAge(currentStory.createdAt)}
+                    </span>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveStoryIndex(null)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#fff",
-                    cursor: "pointer",
-                    padding: "6px",
-                  }}
-                >
-                  <X size={26} />
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  {isMine && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteCurrentStatus}
+                      style={{
+                        background: "rgba(0,0,0,0.3)",
+                        border: "none",
+                        color: "#ef4444",
+                        cursor: "pointer",
+                        padding: "8px",
+                        borderRadius: "50%",
+                        display: "flex",
+                      }}
+                      title="حذف الحالة"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setActiveStoryIndex(null)}
+                    style={{
+                      background: "rgba(0,0,0,0.3)",
+                      border: "none",
+                      color: "#fff",
+                      cursor: "pointer",
+                      padding: "8px",
+                      borderRadius: "50%",
+                      display: "flex",
+                    }}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
               </div>
 
               {/* Story Content Area */}
@@ -861,7 +937,7 @@ export default function StatusPage() {
                   userSelect: "none",
                 }}
               >
-                {/* Previous Story Tap Trigger (Left 30%) */}
+                {/* Previous Story Tap Trigger */}
                 <div
                   style={{
                     position: "absolute",
@@ -879,7 +955,7 @@ export default function StatusPage() {
                   }}
                 />
 
-                {/* Next Story Tap Trigger (Right 35%) */}
+                {/* Next Story Tap Trigger */}
                 <div
                   style={{
                     position: "absolute",
@@ -891,7 +967,7 @@ export default function StatusPage() {
                     cursor: "pointer",
                   }}
                   onClick={() => {
-                    if (activeStoryIndex < statuses.length - 1) {
+                    if (activeStoryIndex < activeStoryList.length - 1) {
                       setActiveStoryIndex(activeStoryIndex + 1);
                     } else {
                       setActiveStoryIndex(null);
@@ -899,11 +975,11 @@ export default function StatusPage() {
                   }}
                 />
 
-                {statuses[activeStoryIndex].type === "text" ? (
+                {currentStory.type === "text" ? (
                   <p
                     style={{
                       color: "#fff",
-                      fontSize: "1.8rem",
+                      fontSize: "1.85rem",
                       fontWeight: "600",
                       textAlign: "center",
                       lineHeight: "1.6",
@@ -911,11 +987,11 @@ export default function StatusPage() {
                       wordBreak: "break-word",
                     }}
                   >
-                    {statuses[activeStoryIndex].content}
+                    {currentStory.content}
                   </p>
                 ) : (
                   <img
-                    src={statuses[activeStoryIndex].content}
+                    src={currentStory.content}
                     alt="Status Story"
                     style={{
                       maxWidth: "100%",
@@ -927,16 +1003,42 @@ export default function StatusPage() {
                 )}
               </div>
 
-              {/* Bottom Reply Bar */}
-              {!statuses[activeStoryIndex].isMine && (
+              {/* ==================== BOTTOM VIEWER BAR ==================== */}
+              {isMine ? (
+                /* Owner Views Bar */
+                <div
+                  style={{
+                    padding: "14px 20px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    background: "rgba(0,0,0,0.5)",
+                    zIndex: 20,
+                    cursor: "pointer",
+                    backdropFilter: "blur(8px)",
+                  }}
+                  onClick={() => setShowViewersSheet(true)}
+                >
+                  <Eye size={18} color="#00a884" />
+                  <span style={{ color: "#fff", fontWeight: 600, fontSize: "0.92rem" }}>
+                    {viewersList.length > 0 ? `${viewersList.length} مشاهدة` : "لم يشاهدها أحد بعد"}
+                  </span>
+                  <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.78rem", marginRight: 4 }}>
+                    (انقر لعرض القائمة)
+                  </span>
+                </div>
+              ) : (
+                /* Visitor Reply Bar */
                 <div
                   style={{
                     padding: "16px 20px",
                     display: "flex",
                     alignItems: "center",
                     gap: "10px",
-                    background: "rgba(0,0,0,0.4)",
+                    background: "rgba(0,0,0,0.5)",
                     zIndex: 20,
+                    backdropFilter: "blur(8px)",
                   }}
                 >
                   <input
@@ -953,7 +1055,7 @@ export default function StatusPage() {
                       borderRadius: "24px",
                       border: "none",
                       outline: "none",
-                      background: "rgba(255,255,255,0.15)",
+                      background: "rgba(255,255,255,0.18)",
                       color: "#fff",
                       fontSize: "0.95rem",
                     }}
@@ -980,10 +1082,142 @@ export default function StatusPage() {
                   </button>
                 </div>
               )}
+
+              {/* ==================== VIEWERS BOTTOM SHEET MODAL ==================== */}
+              {showViewersSheet && isMine && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 30,
+                    background: "rgba(0, 0, 0, 0.65)",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "flex-end",
+                  }}
+                  onClick={() => setShowViewersSheet(false)}
+                >
+                  <div
+                    style={{
+                      background: "#1f2c34",
+                      borderTopLeftRadius: "20px",
+                      borderTopRightRadius: "20px",
+                      maxHeight: "65vh",
+                      display: "flex",
+                      flexDirection: "column",
+                      padding: "20px",
+                      boxShadow: "0 -8px 32px rgba(0,0,0,0.6)",
+                      animation: "slideUp 0.22s ease-out",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Sheet Header */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingBottom: "14px",
+                        borderBottom: "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Eye size={20} color="#00a884" />
+                        <h3 style={{ margin: 0, fontSize: "1.1rem", color: "#e9edef", fontWeight: 600 }}>
+                          المشاهدات ({viewersList.length})
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowViewersSheet(false)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#8696a0",
+                          cursor: "pointer",
+                          padding: "4px",
+                        }}
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    {/* Viewers List */}
+                    <div
+                      style={{
+                        overflowY: "auto",
+                        maxHeight: "45vh",
+                        paddingTop: "10px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                      }}
+                    >
+                      {viewersList.length > 0 ? (
+                        viewersList.map((viewer, vIdx) => (
+                          <div
+                            key={vIdx}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "10px 8px",
+                              borderRadius: "8px",
+                              background: "rgba(255,255,255,0.03)",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                              <div
+                                style={{
+                                  width: "42px",
+                                  height: "42px",
+                                  borderRadius: "50%",
+                                  background: "#2a3942",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  color: "#00a884",
+                                  fontWeight: 600,
+                                  fontSize: "0.95rem",
+                                }}
+                              >
+                                {viewer.userName?.[0] || "م"}
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column" }}>
+                                <span style={{ color: "#e9edef", fontWeight: 500, fontSize: "0.92rem" }}>
+                                  {viewer.userName}
+                                </span>
+                                <span style={{ color: "#8696a0", fontSize: "0.78rem" }}>
+                                  شاهد حالتك
+                                </span>
+                              </div>
+                            </div>
+                            <span style={{ color: "#00a884", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "4px" }}>
+                              <Clock size={12} />
+                              {formatViewerTime(viewer.viewedAt)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div
+                          style={{
+                            padding: "30px 10px",
+                            textAlign: "center",
+                            color: "#8696a0",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          لم يشاهد أحد حالتك حتى الآن ⏳
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Text Status Creator Screen */}
+          {/* ==================== TEXT STATUS CREATOR SCREEN ==================== */}
           {isCreatingText && (
             <div
               style={{
@@ -1077,7 +1311,7 @@ export default function StatusPage() {
                 <button
                   type="button"
                   onClick={handlePostTextStatus}
-                  disabled={!statusText.trim()}
+                  disabled={!statusText.trim() || publishing}
                   style={{
                     width: "56px",
                     height: "56px",
@@ -1090,7 +1324,7 @@ export default function StatusPage() {
                     color: "#111b21",
                     boxShadow: "0 6px 20px rgba(0,0,0,0.3)",
                     cursor: "pointer",
-                    opacity: statusText.trim() ? 1 : 0.4,
+                    opacity: statusText.trim() && !publishing ? 1 : 0.4,
                   }}
                 >
                   <Send size={24} />

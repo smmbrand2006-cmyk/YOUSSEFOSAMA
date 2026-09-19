@@ -1,6 +1,6 @@
 import { Timestamp } from "firebase/firestore";
 
-export type MessageType = "text" | "image" | "system";
+export type MessageType = "text" | "image" | "audio" | "system";
 
 export interface Message {
   id: string;
@@ -9,6 +9,8 @@ export interface Message {
   text: string;
   type: MessageType;
   mediaCode?: string; // Encoded Base64 string directly in document - zero Storage needed!
+  duration?: number;
+  extra?: Record<string, any>;
   replyTo?: {
     messageId: string;
     text: string;

@@ -55,9 +55,139 @@ import {
   Download,
   Palette,
   Settings,
+  Mic,
+  Play,
+  Pause,
+  Volume2,
 } from "lucide-react";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import styles from "@/styles/chat.module.css";
+
+function VoiceNotePlayer({
+  src,
+  duration,
+  isOutgoing,
+}: {
+  src: string;
+  duration?: number;
+  isOutgoing: boolean;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(duration || 0);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current && (!duration || isNaN(duration))) {
+      setAudioDuration(audioRef.current.duration || 0);
+    }
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
+  const formatSecs = (secs: number) => {
+    if (isNaN(secs) || secs < 0) return "0:00";
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "6px 8px",
+        minWidth: 220,
+        maxWidth: 290,
+      }}
+    >
+      <audio
+        ref={audioRef}
+        src={src}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={handleEnded}
+      />
+
+      {/* Play/Pause Button */}
+      <button
+        type="button"
+        onClick={togglePlay}
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: "50%",
+          background: isOutgoing ? "#00a884" : "#202c33",
+          border: "none",
+          color: isOutgoing ? "#111b21" : "#00a884",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          flexShrink: 0,
+          boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+          transition: "transform 0.1s ease",
+        }}
+      >
+        {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" style={{ marginRight: -2 }} />}
+      </button>
+
+      {/* Progress Track & Duration */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+        <input
+          type="range"
+          min={0}
+          max={audioDuration || 100}
+          step={0.1}
+          value={currentTime}
+          onChange={handleSeek}
+          style={{
+            width: "100%",
+            accentColor: "#00a884",
+            cursor: "pointer",
+            height: 4,
+          }}
+        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", color: "var(--outline)" }}>
+          <span>{formatSecs(isPlaying ? currentTime : audioDuration)}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 3, color: isPlaying ? "#00a884" : "var(--outline)" }}>
+            <Mic size={12} /> فويس
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {}) {
   const params = useParams();
@@ -103,6 +233,15 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
   const [showInChatSearch, setShowInChatSearch] = useState(false);
   const [inChatSearchQuery, setInChatSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -350,9 +489,8 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
     }
   };
 
-  // Send image as Base64 encoded string directly into Firestore (Zero Storage)
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // Process and send an image file (compressed and encrypted)
+  const uploadAndSendImage = async (file: File) => {
     if (!file || !userProfile || !chatId) return;
     if (isBlocked) {
       alert("لا يمكنك إرسال وسائط لمستخدم محظور.");
@@ -363,7 +501,7 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
     setShowAttach(false);
 
     try {
-      const base64Code = await encodeImageToBase64(file);
+      const base64Code = await encodeImageToBase64(file, 640, 0.7);
       // ⚡ Optimistic image display
       const tempId = `opt_img_${Date.now()}`;
       const optimisticImgMsg: Message = {
@@ -402,6 +540,159 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      uploadAndSendImage(file);
+    }
+  };
+
+  // Support pasting image screenshots directly from clipboard
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          await uploadAndSendImage(file);
+          break;
+        }
+      }
+    }
+  };
+
+  // Start real-time Voice Recording via MediaRecorder
+  const handleStartRecording = async () => {
+    if (isRecording) return;
+    if (isBlocked) {
+      alert("لا يمكنك إرسال تسجيل صوتي لمستخدم محظور.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+        ? "audio/mp4"
+        : "";
+
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.start(250);
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Failed to start voice recording:", err);
+      alert("تعذر الوصول إلى الميكروفون. يرجى التأكد من منح الإذن في المتصفح.");
+    }
+  };
+
+  // Cancel Voice Recording without sending
+  const handleCancelRecording = () => {
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      audioStreamRef.current = null;
+    }
+    setIsRecording(false);
+    setRecordingDuration(0);
+    audioChunksRef.current = [];
+  };
+
+  // Finish & Send Voice Recording
+  const handleSendRecording = async () => {
+    if (!mediaRecorderRef.current || !userProfile || !chatId) return;
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+
+    const duration = recordingDuration;
+    const recorder = mediaRecorderRef.current;
+
+    recorder.onstop = async () => {
+      try {
+        const mimeType = recorder.mimeType || "audio/webm";
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        if (audioBlob.size < 100) {
+          handleCancelRecording();
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const audioBase64 = reader.result as string;
+          const tempId = `opt_voice_${Date.now()}`;
+          const optimisticVoiceMsg: Message = {
+            id: tempId,
+            senderId: userProfile.uid,
+            senderName: userProfile.displayName,
+            text: "🎤 رسالة صوتية",
+            type: "audio",
+            mediaCode: audioBase64,
+            reactions: {},
+            isEdited: false,
+            isDeleted: false,
+            deletedFor: [],
+            createdAt: { toDate: () => new Date() } as any,
+            extra: { duration },
+          } as any;
+
+          setMessages((prev) => [...prev, optimisticVoiceMsg]);
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 10);
+
+          await sendMessage(
+            chatId,
+            userProfile.uid,
+            userProfile.displayName,
+            "🎤 رسالة صوتية",
+            {
+              type: "audio",
+              mediaCode: audioBase64,
+              duration,
+            }
+          );
+        };
+        reader.readAsDataURL(audioBlob);
+      } catch (err) {
+        console.error("Failed to process voice note:", err);
+        alert("فشل إرسال الفويس.");
+      } finally {
+        if (audioStreamRef.current) {
+          audioStreamRef.current.getTracks().forEach((track) => track.stop());
+          audioStreamRef.current = null;
+        }
+        setIsRecording(false);
+        setRecordingDuration(0);
+        audioChunksRef.current = [];
+      }
+    };
+
+    recorder.stop();
   };
 
   // Calls
@@ -1243,18 +1534,35 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       <div style={{ marginBottom: 6 }}>
                         <img
                           src={msg.mediaCode}
-                          alt="صورة مشفرة"
+                          alt="صورة المحادثة"
+                          onClick={() => setLightboxImage(msg.mediaCode || null)}
+                          title="انقر لعرض الصورة بالحجم الكامل"
                           style={{
                             maxWidth: "100%",
                             maxHeight: 320,
                             borderRadius: 6,
                             display: "block",
                             objectFit: "cover",
+                            cursor: "pointer",
+                            transition: "opacity 0.15s ease",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.opacity = "0.92";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.opacity = "1";
                           }}
                         />
                       </div>
                     )}
-                    {msg.text && (msg.type !== "image" || !msg.mediaCode) && (
+                    {msg.type === "audio" && msg.mediaCode && (
+                      <VoiceNotePlayer
+                        src={msg.mediaCode}
+                        duration={msg.duration || (msg as any).extra?.duration || 0}
+                        isOutgoing={isOutgoing}
+                      />
+                    )}
+                    {msg.text && msg.type !== "image" && msg.type !== "audio" && (
                       <span>
                         {inChatSearchQuery.trim() &&
                         msg.text
@@ -1383,98 +1691,138 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
             </div>
           )}
 
-          {/* Attachment / Emoji buttons */}
-          <div className={styles.inputActionBtns}>
-            <button
-              type="button"
-              aria-label="Emoji"
-              className={styles.inputIconBtn}
-              title="رموز تعبيرية"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: "22px" }}>
-                mood
-              </span>
-            </button>
+          {/* Main Input Bar */}
+          {isRecording ? (
+            <div className={styles.voiceRecordingBar}>
+              <div className={styles.voiceRecordingIndicator}>
+                <span className={styles.recordingBlinkDot} />
+                <span className={styles.recordingTimerText}>
+                  {Math.floor(recordingDuration / 60)}:
+                  {recordingDuration % 60 < 10 ? "0" : ""}
+                  {recordingDuration % 60}
+                </span>
+                <span style={{ fontSize: "0.88rem", color: "#8696a0", marginRight: 6 }}>
+                  جاري تسجيل فويس...
+                </span>
+              </div>
 
-            <div style={{ position: "relative" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {/* Cancel Button */}
+                <button
+                  type="button"
+                  className={styles.voiceCancelBtn}
+                  onClick={handleCancelRecording}
+                  title="إلغاء التسجيل"
+                >
+                  <Trash2 size={18} color="#f87171" />
+                  <span style={{ fontSize: "0.85rem", color: "#f87171" }}>إلغاء</span>
+                </button>
+
+                {/* Send Voice Button */}
+                <button
+                  type="button"
+                  className={styles.voiceSendBtn}
+                  onClick={handleSendRecording}
+                  title="إرسال الفويس"
+                >
+                  <Send size={18} color="#111b21" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Left Actions: Attach & Direct Image Button */}
+              <div className={styles.inputLeftActions} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    aria-label="المرفقات"
+                    className={`${styles.inputActionBtn} ${
+                      showAttach ? styles.activeChatTopActionBtn : ""
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowAttach((prev) => !prev);
+                    }}
+                    title="المرفقات"
+                  >
+                    <Paperclip size={20} />
+                  </button>
+
+                  {showAttach && (
+                    <div
+                      className={styles.attachMenu}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <label className={styles.attachItem} style={{ cursor: "pointer" }}>
+                        <div
+                          className={styles.attachItemIcon}
+                          style={{ background: "var(--primary-container)" }}
+                        >
+                          <ImageIcon size={20} color="var(--primary)" />
+                        </div>
+                        <span className={styles.attachItemLabel}>
+                          {uploading ? "جاري التشفير..." : "صورة (مشفرة Base64)"}
+                        </span>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={handleImageUpload}
+                          disabled={uploading}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Direct Image Pick Button */}
+                <button
+                  type="button"
+                  aria-label="إرسال صورة"
+                  className={styles.inputActionBtn}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  title="إرسال صورة مباشرة"
+                >
+                  <ImageIcon size={20} />
+                </button>
+              </div>
+
+              {/* Main Text Box */}
+              <div className={styles.inputTextBox}>
+                <textarea
+                  ref={textareaRef}
+                  placeholder="اكتب رسالة..."
+                  value={inputText}
+                  onChange={handleTextareaChange}
+                  onPaste={handlePaste}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  rows={1}
+                  className={styles.inputTextarea}
+                />
+              </div>
+
+              {/* Mic / Send Button */}
               <button
                 type="button"
-                aria-label="Attach file"
-                className={styles.inputIconBtn}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowAttach(!showAttach);
-                }}
-                title="إرفاق صورة مشفرة"
+                aria-label={inputText.trim() ? "إرسال" : "تسجيل صوتي"}
+                className={`${styles.inputSendBtn} ${
+                  inputText.trim() ? styles.inputSendBtnActive : ""
+                }`}
+                onClick={inputText.trim() ? () => handleSend() : handleStartRecording}
+                title={inputText.trim() ? "إرسال الرسالة" : "تسجيل فويس (Voice Note)"}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: "22px" }}>
-                  attach_file
-                </span>
+                {inputText.trim() ? <Send size={20} /> : <Mic size={20} />}
               </button>
-
-              {showAttach && (
-                <div
-                  className={styles.attachMenu}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <label className={styles.attachItem} style={{ cursor: "pointer" }}>
-                    <div
-                      className={styles.attachItemIcon}
-                      style={{ background: "var(--primary-container)" }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
-                        image
-                      </span>
-                    </div>
-                    <span className={styles.attachItemLabel}>
-                      {uploading ? "جاري التشفير..." : "صورة (مشفرة Base64)"}
-                    </span>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      style={{ display: "none" }}
-                      onChange={handleImageUpload}
-                      disabled={uploading}
-                    />
-                  </label>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Main Text Box */}
-          <div className={styles.inputTextBox}>
-            <textarea
-              ref={textareaRef}
-              placeholder="اكتب رسالة..."
-              value={inputText}
-              onChange={handleTextareaChange}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              rows={1}
-              className={styles.inputTextarea}
-            />
-          </div>
-
-          {/* Mic / Send Button */}
-          <button
-            type="button"
-            aria-label={inputText.trim() ? "إرسال" : "تسجيل صوتي"}
-            className={`${styles.inputSendBtn} ${
-              inputText.trim() ? styles.inputSendBtnActive : ""
-            }`}
-            onClick={inputText.trim() ? handleSend : undefined}
-            title={inputText.trim() ? "إرسال" : "تسجيل صوتي"}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
-              {inputText.trim() ? "send" : "mic"}
-            </span>
-          </button>
+            </>
+          )}
         </div>
       )}
 
@@ -1583,6 +1931,90 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Fullscreen Image Lightbox Modal */}
+      {lightboxImage && (
+        <div
+          onClick={() => setLightboxImage(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2000,
+            background: "rgba(0, 0, 0, 0.92)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            backdropFilter: "blur(12px)",
+            padding: 20,
+          }}
+        >
+          {/* Top Actions */}
+          <div
+            style={{
+              position: "absolute",
+              top: 24,
+              right: 24,
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              zIndex: 2005,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <a
+              href={lightboxImage}
+              download="youssef_app_image.jpg"
+              style={{
+                background: "rgba(255,255,255,0.18)",
+                color: "#fff",
+                padding: "10px",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textDecoration: "none",
+                transition: "background 0.2s",
+              }}
+              title="تحميل الصورة"
+            >
+              <Download size={22} />
+            </a>
+            <button
+              type="button"
+              onClick={() => setLightboxImage(null)}
+              style={{
+                background: "rgba(255,255,255,0.18)",
+                border: "none",
+                color: "#fff",
+                padding: "10px",
+                borderRadius: "50%",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="إغلاق"
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          {/* Expanded Image */}
+          <img
+            src={lightboxImage}
+            alt="صورة مكبرة"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: "92vw",
+              maxHeight: "88vh",
+              objectFit: "contain",
+              borderRadius: "10px",
+              boxShadow: "0 12px 48px rgba(0,0,0,0.85)",
+            }}
+          />
         </div>
       )}
     </section>
