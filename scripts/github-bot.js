@@ -169,13 +169,18 @@ async function syncToGitHub() {
   // 6. Push to GitHub
   console.log("\n🚀 [3/3] جاري الرفع إلى مستودع GitHub...");
   try {
-    run("git push -u origin main");
+    const res = run("git push -u origin main");
+    if (res === null) {
+      console.log("🔄 جاري مزامنة الفروع قبل الرفع...");
+      run("git pull origin main --rebase --allow-unrelated-histories", true);
+      run("git push -u origin main");
+    }
     console.log("\n=======================================================");
     console.log("  🎉 تم رفع التعديلات وحفظها بنجاح على GitHub!");
     console.log(`  🌐 رابط المستودع: https://github.com/${REPO_OWNER_REPO}`);
     console.log("=======================================================\n");
   } catch (err) {
-    console.error("\n❌ فشل الرفع! تأكد من صحة الـ Token واتصال الإنترنت.");
+    console.error("\n❌ فشل الرفع! تأكد من صحة الـ Token وصلاحيات الحساب.");
   }
 }
 
