@@ -75,9 +75,6 @@ export default function ChatSidebar() {
           },
         } as any);
       }
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", `/chat/${chatId}`);
-      }
     } catch (err: any) {
       alert(err.message || "حدث خطأ أثناء فتح محادثة الدعم.");
     } finally {
@@ -107,9 +104,6 @@ export default function ChatSidebar() {
             [targetUser.uid]: targetUser.displayName || targetUser.userCode,
           },
         } as any);
-      }
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", `/chat/${chatId}`);
       }
     } catch (err: any) {
       alert(err.message || "حدث خطأ أثناء فتح المحادثة المباشرة.");
@@ -153,9 +147,6 @@ export default function ChatSidebar() {
       if (chatDoc) {
         setActiveChat(chatDoc);
       }
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", `/chat/${chatId}`);
-      }
     } catch (err: any) {
       alert(err.message || "Failed to accept request");
     }
@@ -176,9 +167,6 @@ export default function ChatSidebar() {
 
   const handleChatClick = (chat: any) => {
     setActiveChat(chat);
-    if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", `/chat/${chat.id}`);
-    }
   };
 
   const getOtherParticipant = (chat: any) => {

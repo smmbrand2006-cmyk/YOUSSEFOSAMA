@@ -1,38 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { MessageCircle } from "lucide-react";
 import { useChats } from "@/lib/contexts/ChatContext";
 import ChatClient from "./[chatId]/ChatClient";
+import { MessageCircle } from "lucide-react";
 import styles from "@/styles/chat.module.css";
 
-export default function ChatEmptyPage() {
+export default function ChatMainPage() {
   const { activeChat } = useChats();
-  const [urlChatId, setUrlId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const parts = window.location.pathname.split("/").filter(Boolean);
-      if (parts[0] === "chat" && parts[1] && parts[1] !== "direct") {
-        setUrlId(parts[1]);
-      }
-    }
-  }, []);
-
-  const selectedChatId = activeChat?.id || urlChatId;
-
-  if (selectedChatId) {
-    return <ChatClient chatIdProp={selectedChatId} />;
+  // If a chat is actively selected, show it
+  if (activeChat) {
+    return <ChatClient chatIdProp={activeChat.id} />;
   }
 
+  // On initial load or after reload, return to clean point zero
   return (
     <div className={styles.emptyChatMain}>
-      <MessageCircle size={120} strokeWidth={0.5} className={styles.emptyChatIcon} />
+      <MessageCircle size={100} strokeWidth={0.8} className={styles.emptyChatIcon} />
       <h2>Youssef App</h2>
       <p>
         أهلاً بك في تطبيق يوسف شات
         <br />
-        اختر محادثة من القائمة لبدء التراسل الفوري بأمان وسرعة فائقة
+        اختر محادثة من القائمة لبدء التراسل الفوري
       </p>
     </div>
   );

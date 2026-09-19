@@ -379,13 +379,7 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
         <div className={styles.chatHeaderLeft}>
           <button
             className={`btn-icon ${styles.mobileBackBtn}`}
-            onClick={() => {
-              setActiveChat(null);
-              if (typeof window !== "undefined") {
-                window.history.replaceState(null, "", "/chat");
-              }
-              router.push("/chat");
-            }}
+            onClick={() => setActiveChat(null)}
             title="رجوع"
           >
             <ArrowLeft size={22} />
