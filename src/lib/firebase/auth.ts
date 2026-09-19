@@ -1,5 +1,6 @@
 import {
-  signInAnonymously,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
@@ -22,92 +23,155 @@ import { UserProfile } from "@/lib/types/user";
 const googleProvider = new GoogleAuthProvider();
 
 /**
- * Register a new user with a custom code/number.
- * Signs in anonymously FIRST so Firestore requests have request.auth != null.
+ * Transforms a user code/number into a valid internal Firebase auth identifier
  */
-export async function registerWithCode(
-  userCode: string,
-  displayName: string
-): Promise<User> {
-  // 1. Sign in anonymously FIRST so request.auth != null in Firestore
-  let user = auth.currentUser;
-  if (!user) {
-    const cred = await signInAnonymously(auth);
-    user = cred.user;
-  }
-
-  // 2. Check if user code is already taken by another account
-  const codeQuery = query(
-    collection(db, "users"),
-    where("userCode", "==", userCode)
-  );
-  const existing = await getDocs(codeQuery);
-  if (!existing.empty && existing.docs[0].id !== user.uid) {
-    throw new Error("هذا الكود مستخدم بالفعل، يرجى اختيار كود أو رقم آخر.");
-  }
-
-  // 3. Create user profile document
-  const userProfile = {
-    uid: user.uid,
-    userCode,
-    displayName,
-    bio: "",
-    createdAt: serverTimestamp(),
-    lastSeen: serverTimestamp(),
-    isOnline: true,
-    contacts: [] as string[],
-    blockedUsers: [] as string[],
-    settings: {
-      lastSeenPrivacy: "everyone",
-      statusPrivacy: "everyone",
-      readReceipts: true,
-      notificationSound: true,
-    },
-  };
-
-  await setDoc(doc(db, "users", user.uid), userProfile);
-
-  // Store for session persistence
-  if (typeof window !== "undefined") {
-    localStorage.setItem("youssef_app_uid", user.uid);
-    localStorage.setItem("youssef_app_code", userCode);
-  }
-
-  return user;
+function codeToEmail(code: string): string {
+  const clean = code.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "_");
+  return `${clean}@youssef.app`;
 }
 
 /**
- * Login with existing user code.
+ * Register a new user with custom Code/Number + Password.
+ * Secured by Firebase Auth under the hood.
  */
-export async function loginWithCode(userCode: string): Promise<UserProfile> {
-  // 1. Ensure authenticated session exists
-  let user = auth.currentUser;
-  if (!user) {
-    const cred = await signInAnonymously(auth);
-    user = cred.user;
+export async function registerWithCode(
+  userCode: string,
+  password: string,
+  displayName: string
+): Promise<User> {
+  const cleanCode = userCode.trim();
+
+  if (cleanCode.length < 3) {
+    throw new Error("الكود أو الرقم يجب أن يكون 3 خانات على الأقل.");
+  }
+  if (!password || password.length < 6) {
+    throw new Error("كلمة المرور يجب أن تكون 6 خانات أو أرقام على الأقل.");
+  }
+  if (!displayName.trim()) {
+    throw new Error("يرجى إدخال اسمك.");
   }
 
-  // 2. Query user by code
+  // Check in Firestore if this code is already registered
   const codeQuery = query(
     collection(db, "users"),
-    where("userCode", "==", userCode)
+    where("userCode", "==", cleanCode)
   );
-  const snapshot = await getDocs(codeQuery);
-
-  if (snapshot.empty) {
-    throw new Error("لم يتم العثور على حساب بهذا الكود.");
+  const existing = await getDocs(codeQuery);
+  if (!existing.empty) {
+    throw new Error("هذا الكود مستخدم بالفعل من قبل شخص آخر! يرجى اختيار كود آخر.");
   }
 
-  const userDoc = snapshot.docs[0];
-  const userData = userDoc.data() as UserProfile;
+  const email = codeToEmail(cleanCode);
 
-  // Store the mapping in localStorage for session persistence
-  if (typeof window !== "undefined") {
-    localStorage.setItem("youssef_app_uid", userData.uid);
-    localStorage.setItem("youssef_app_code", userCode);
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const user = cred.user;
+
+    const userProfile: UserProfile = {
+      uid: user.uid,
+      userCode: cleanCode,
+      displayName: displayName.trim(),
+      bio: "",
+      createdAt: serverTimestamp() as any,
+      lastSeen: serverTimestamp() as any,
+      isOnline: true,
+      contacts: [],
+      blockedUsers: [],
+      settings: {
+        lastSeenPrivacy: "everyone",
+        statusPrivacy: "everyone",
+        readReceipts: true,
+        notificationSound: true,
+      },
+    };
+
+    await setDoc(doc(db, "users", user.uid), userProfile);
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("youssef_app_uid", user.uid);
+      localStorage.setItem("youssef_app_code", cleanCode);
+    }
+
+    return user;
+  } catch (err: any) {
+    if (err.code === "auth/email-already-in-use") {
+      throw new Error("هذا الكود مستخدم بالفعل! اختر كوداً آخر.");
+    }
+    if (err.code === "auth/weak-password") {
+      throw new Error("كلمة المرور يجب ألا تقل عن 6 خانات.");
+    }
+    if (err.code === "auth/operation-not-allowed") {
+      throw new Error("يرجى تفعيل Email/Password في قسم Authentication بـ Firebase.");
+    }
+    throw new Error(err.message || "فشل إنشاء الحساب.");
+  }
+}
+
+/**
+ * Login with existing user Code/Number + Password.
+ */
+export async function loginWithCode(
+  userCode: string,
+  password: string
+): Promise<UserProfile> {
+  const cleanCode = userCode.trim();
+
+  if (!cleanCode) {
+    throw new Error("يرجى إدخال كود أو رقم حسابك.");
+  }
+  if (!password) {
+    throw new Error("يرجى إدخال كلمة المرور.");
   }
 
-  return userData;
+  const email = codeToEmail(cleanCode);
+
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    const user = cred.user;
+
+    const userDocSnap = await getDoc(doc(db, "users", user.uid));
+    let profile: UserProfile;
+
+    if (userDocSnap.exists()) {
+      profile = userDocSnap.data() as UserProfile;
+    } else {
+      profile = {
+        uid: user.uid,
+        userCode: cleanCode,
+        displayName: cleanCode,
+        bio: "",
+        createdAt: serverTimestamp() as any,
+        lastSeen: serverTimestamp() as any,
+        isOnline: true,
+        contacts: [],
+        blockedUsers: [],
+        settings: {
+          lastSeenPrivacy: "everyone",
+          statusPrivacy: "everyone",
+          readReceipts: true,
+          notificationSound: true,
+        },
+      };
+      await setDoc(doc(db, "users", user.uid), profile);
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("youssef_app_uid", user.uid);
+      localStorage.setItem("youssef_app_code", cleanCode);
+    }
+
+    return profile;
+  } catch (err: any) {
+    if (
+      err.code === "auth/user-not-found" ||
+      err.code === "auth/invalid-credential" ||
+      err.code === "auth/wrong-password" ||
+      err.code === "auth/invalid-email"
+    ) {
+      throw new Error("الكود أو كلمة المرور غير صحيحة.");
+    }
+    throw new Error(err.message || "فشل تسجيل الدخول.");
+  }
 }
 
 /**
@@ -117,7 +181,6 @@ export async function signInWithGoogle(): Promise<User> {
   const cred = await signInWithPopup(auth, googleProvider);
   const user = cred.user;
 
-  // Check if user profile exists
   const userDocSnap = await getDoc(doc(db, "users", user.uid));
   if (!userDocSnap.exists()) {
     const userProfile = {

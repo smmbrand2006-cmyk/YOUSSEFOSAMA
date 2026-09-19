@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithCode, signInWithGoogle } from "@/lib/firebase/auth";
-import { Hash, MessageCircle } from "lucide-react";
+import { Hash, Lock, MessageCircle } from "lucide-react";
 import styles from "@/styles/auth.module.css";
 
 export default function LoginPage() {
   const router = useRouter();
   const [userCode, setUserCode] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -17,16 +18,20 @@ export default function LoginPage() {
     setError("");
 
     if (!userCode.trim()) {
-      setError("Please enter your code.");
+      setError("يرجى إدخال الكود أو الرقم الخاص بك.");
+      return;
+    }
+    if (!password) {
+      setError("يرجى إدخال كلمة المرور.");
       return;
     }
 
     setLoading(true);
     try {
-      await loginWithCode(userCode.trim());
+      await loginWithCode(userCode.trim(), password);
       router.replace("/chat");
     } catch (err: any) {
-      setError(err.message || "Login failed.");
+      setError(err.message || "فشل تسجيل الدخول.");
     } finally {
       setLoading(false);
     }
@@ -39,7 +44,7 @@ export default function LoginPage() {
       await signInWithGoogle();
       router.replace("/chat");
     } catch (err: any) {
-      setError(err.message || "Google sign-in failed.");
+      setError(err.message || "فشل تسجيل الدخول بـ Google.");
     } finally {
       setLoading(false);
     }
@@ -56,9 +61,9 @@ export default function LoginPage() {
             <h1>Youssef App</h1>
           </div>
 
-          <h2 className={styles.authTitle}>Welcome Back</h2>
+          <h2 className={styles.authTitle}>تسجيل الدخول</h2>
           <p className={styles.authSubtitle}>
-            Enter your unique code to sign in
+            أدخل كودك الخاص وكلمة المرور للدخول إلى محادثاتك
           </p>
 
           <form className={styles.authForm} onSubmit={handleLogin}>
@@ -67,7 +72,7 @@ export default function LoginPage() {
             <div className={styles.authInput}>
               <input
                 type="text"
-                placeholder="Your unique code"
+                placeholder="كودك أو رقمك (مثال: 010999)"
                 value={userCode}
                 onChange={(e) => setUserCode(e.target.value)}
                 autoFocus
@@ -75,16 +80,26 @@ export default function LoginPage() {
               <Hash size={18} className={styles.authInputIcon} />
             </div>
 
+            <div className={styles.authInput}>
+              <input
+                type="password"
+                placeholder="كلمة المرور"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <Lock size={18} className={styles.authInputIcon} />
+            </div>
+
             <button
               type="submit"
               className={styles.authSubmit}
               disabled={loading}
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "جاري التحقق والدخول..." : "تسجيل الدخول ←"}
             </button>
           </form>
 
-          <div className={styles.authDivider}>or</div>
+          <div className={styles.authDivider}>أو</div>
 
           <button
             className={styles.googleBtn}
@@ -109,39 +124,38 @@ export default function LoginPage() {
                 fill="#EA4335"
               />
             </svg>
-            Continue with Google
+            المتابعة بحساب Google
           </button>
 
           <p className={styles.authSwitch}>
-            Don&apos;t have an account?{" "}
-            <a onClick={() => router.push("/auth/register")}>Create one</a>
+            ليس لديك حساب بعد؟{" "}
+            <a onClick={() => router.push("/auth/register")}>إنشاء حساب جديد</a>
           </p>
         </div>
       </div>
 
       <div className={styles.authRight}>
         <div className={styles.authRightContent}>
-          <h2>Welcome to<br />Youssef App</h2>
+          <h2>مرحباً بك في<br />Youssef App</h2>
           <p>
-            Connect with friends and family with blazing-fast messaging,
-            crystal-clear calls, and secure conversations.
+            تطبيق مراسلة فوري وآمن يعتمد على كود تعريفي خاص بك مع كلمة سر، بدون الحاجة لمساحات تخزين سحابية أو تعقيدات.
           </p>
           <div className={styles.authRightFeatures}>
             <div className={styles.authFeature}>
+              <div className={styles.authFeatureIcon}>🔒</div>
+              <span>حماية كاملة بكلمة مرور خاصة بك</span>
+            </div>
+            <div className={styles.authFeature}>
               <div className={styles.authFeatureIcon}>💬</div>
-              <span>Real-time messaging with rich media</span>
+              <span>محادثات فورية مباشرة</span>
             </div>
             <div className={styles.authFeature}>
               <div className={styles.authFeatureIcon}>📞</div>
-              <span>HD voice & video calls</span>
-            </div>
-            <div className={styles.authFeature}>
-              <div className={styles.authFeatureIcon}>🔒</div>
-              <span>Secure & private conversations</span>
+              <span>مكالمات صوت وفيديو P2P عبر WebRTC</span>
             </div>
             <div className={styles.authFeature}>
               <div className={styles.authFeatureIcon}>⚡</div>
-              <span>Lightning-fast performance</span>
+              <span>سريع وخفيف بدون تخزين صور خارجي</span>
             </div>
           </div>
         </div>
