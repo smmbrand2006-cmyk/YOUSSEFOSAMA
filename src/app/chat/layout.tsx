@@ -1,11 +1,13 @@
 "use client";
 
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { useChats } from "@/lib/contexts/ChatContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import AppNavRail from "@/components/chat/AppNavRail";
 import AppHeader from "@/components/chat/AppHeader";
 import ChatSidebar from "@/components/chat/ChatSidebar";
+import MobileBottomNav from "@/components/chat/MobileBottomNav";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import styles from "@/styles/chat.module.css";
 
@@ -15,8 +17,10 @@ export default function ChatLayout({
   children: React.ReactNode;
 }) {
   const { isAuthenticated, loading, userProfile } = useAuth();
+  const { activeChat } = useChats();
   const router = useRouter();
   const [showMyProfile, setShowMyProfile] = useState(false);
+  const [mobileTab, setMobileTab] = useState("chats");
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -61,6 +65,24 @@ export default function ChatLayout({
           {children}
         </div>
       </div>
+
+      {/* Mobile Bottom Navigation Bar (Visible only on mobile when no active chat) */}
+      {!activeChat && (
+        <MobileBottomNav
+          activeTab={mobileTab}
+          onTabChange={(tab) => setMobileTab(tab)}
+          onOpenSettings={() => setShowMyProfile(true)}
+          onOpenCalls={() => {
+            alert("ميزة سجل المكالمات قيد الإعداد!");
+          }}
+          onOpenCommunities={() => {
+            setMobileTab("communities");
+          }}
+          onOpenStatus={() => {
+            alert("ميزة الحالات (Status) قريباً في التحديث القادم!");
+          }}
+        />
+      )}
 
       {/* Current User Profile Modal */}
       {userProfile && (

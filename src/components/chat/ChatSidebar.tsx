@@ -33,6 +33,20 @@ export default function ChatSidebar() {
   const [openingSupport, setOpeningSupport] = useState(false);
   const [selectedProfileUser, setSelectedProfileUser] = useState<UserProfile | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showMyProfileModal, setShowMyProfileModal] = useState(false);
+  const cameraInputRef = React.useRef<HTMLInputElement>(null);
+  const mobileSearchInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleCameraClick = () => {
+    cameraInputRef.current?.click();
+  };
+
+  const handleCameraFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleOpenSupport();
+    }
+  };
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -185,106 +199,147 @@ export default function ChatSidebar() {
         activeChat ? styles.sidebarHiddenOnMobile : ""
       }`}
     >
-      {/* 1. Top Header */}
-      <div className={styles.sidebarTopHeader}>
-        <h2 className={styles.sidebarChatsTitle}>Chats</h2>
-        <div className={styles.sidebarHeaderActions}>
-          {/* New Chat Button */}
-          <button
-            type="button"
-            aria-label="New chat"
-            className={styles.sidebarHeaderIconBtn}
-            onClick={handleOpenSupport}
-            title="محادثة جديدة أو الدعم الفني (#123)"
-            disabled={openingSupport}
-          >
-            <span
-              className="material-symbols-outlined"
-              style={{ fontSize: "19px" }}
-            >
-              edit_square
-            </span>
-          </button>
+      {/* 1. Mobile 3-Tier Header (Visible on Mobile Viewports) */}
+      <div className={styles.mobileHeaderContainer}>
+        {/* Tier 1: Title and Action Buttons */}
+        <div className={styles.mobileHeaderTop}>
+          <div className={styles.mobileHeaderLeft}>
+            <div className={styles.mobileHeaderBadge}>
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: "22px" }}
+              >
+                chat
+              </span>
+            </div>
+            <h1 className={styles.mobileHeaderTitle}>Chats</h1>
+          </div>
 
-          {/* Menu Dropdown Button */}
-          <div style={{ position: "relative" }}>
+          <div className={styles.mobileHeaderRight}>
+            {/* Search */}
             <button
               type="button"
-              aria-label="Menu"
-              className={styles.sidebarHeaderIconBtn}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(!showMenu);
-              }}
-              title="القائمة"
+              aria-label="Search"
+              className={styles.mobileHeaderActionBtn}
+              onClick={() => mobileSearchInputRef.current?.focus()}
             >
               <span
                 className="material-symbols-outlined"
-                style={{ fontSize: "19px" }}
+                style={{ fontSize: "22px" }}
               >
-                more_vert
+                search
               </span>
             </button>
 
-            {showMenu && (
-              <div
-                className="dropdown"
-                style={{ right: 0, top: "100%", marginTop: 6 }}
-                onClick={(e) => e.stopPropagation()}
+            {/* Camera */}
+            <button
+              type="button"
+              aria-label="Camera"
+              className={styles.mobileHeaderActionBtn}
+              onClick={handleCameraClick}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: "22px" }}
               >
-                <div className="dropdown-item" onClick={handleOpenSupport}>
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ fontSize: "18px", color: "var(--primary)" }}
-                  >
-                    support_agent
-                  </span>
-                  الدعم الفني (123)
-                </div>
-                <div
-                  className="dropdown-item"
-                  onClick={() => router.push("/profile")}
+                photo_camera
+              </span>
+            </button>
+
+            {/* More Options */}
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                aria-label="More options"
+                className={styles.mobileHeaderActionBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(!showMenu);
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: "22px" }}
                 >
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ fontSize: "18px" }}
-                  >
-                    account_circle
-                  </span>
-                  الملف الشخصي
-                </div>
-                <div className="dropdown-divider" />
+                  more_vert
+                </span>
+              </button>
+
+              {showMenu && (
                 <div
-                  className="dropdown-item dropdown-item-danger"
-                  onClick={handleSignOut}
+                  className="dropdown"
+                  style={{ right: 0, top: "100%", marginTop: 6 }}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ fontSize: "18px" }}
+                  <div className="dropdown-item" onClick={handleOpenSupport}>
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "var(--primary)" }}
+                    >
+                      support_agent
+                    </span>
+                    الدعم الفني (123)
+                  </div>
+                  <div
+                    className="dropdown-item"
+                    onClick={() => setShowMyProfileModal(true)}
                   >
-                    logout
-                  </span>
-                  تسجيل الخروج
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px" }}
+                    >
+                      account_circle
+                    </span>
+                    الملف الشخصي
+                  </div>
+                  <div className="dropdown-divider" />
+                  <div
+                    className="dropdown-item dropdown-item-danger"
+                    onClick={handleSignOut}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px" }}
+                    >
+                      logout
+                    </span>
+                    تسجيل الخروج
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Profile Avatar */}
+            <button
+              type="button"
+              aria-label="My Profile"
+              className={styles.mobileHeaderAvatarBtn}
+              onClick={() => setShowMyProfileModal(true)}
+              title={userProfile?.displayName || "الملف الشخصي"}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: "18px", color: "var(--on-primary)" }}
+              >
+                person
+              </span>
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* 2. Search Container */}
-      <div className={styles.searchContainer}>
-        <div className={styles.searchInner}>
+        {/* Tier 2: Search Bar */}
+        <div className={styles.mobileSearchBar}>
           <span
             className="material-symbols-outlined"
-            style={{ color: "var(--outline)", fontSize: "18px" }}
+            style={{ fontSize: "20px", color: "var(--outline)" }}
           >
             search
           </span>
           <input
-            id="chat-search-input"
+            ref={mobileSearchInputRef}
             type="text"
-            placeholder="بحث أو بدء محادثة جديدة..."
+            className={styles.mobileSearchInput}
+            placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => {
               const val = e.target.value;
@@ -317,60 +372,249 @@ export default function ChatSidebar() {
             </button>
           )}
         </div>
+
+        {/* Tier 3: Filter Pills */}
+        <div className={styles.mobileFilterPillsRow}>
+          <button
+            type="button"
+            className={`${styles.mobileFilterPill} ${
+              filter === "all" ? styles.mobileFilterPillActive : ""
+            }`}
+            onClick={() => setFilter("all")}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            className={`${styles.mobileFilterPill} ${
+              filter === "unread" ? styles.mobileFilterPillActive : ""
+            }`}
+            onClick={() => setFilter("unread")}
+          >
+            Unread
+          </button>
+          <button
+            type="button"
+            className={`${styles.mobileFilterPill} ${
+              filter === "favorites" ? styles.mobileFilterPillActive : ""
+            }`}
+            onClick={() => setFilter("favorites")}
+          >
+            Favourites
+          </button>
+          <button
+            type="button"
+            className={`${styles.mobileFilterPill} ${
+              filter === "groups" ? styles.mobileFilterPillActive : ""
+            }`}
+            onClick={() => setFilter("groups")}
+          >
+            Groups
+          </button>
+          <button
+            type="button"
+            aria-label="Add custom filter"
+            className={`${styles.mobileFilterPill} ${styles.mobileFilterPillAdd}`}
+            onClick={handleOpenSupport}
+            title="تواصل مع الدعم الفني"
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: "16px" }}
+            >
+              add
+            </span>
+          </button>
+        </div>
       </div>
 
-      {/* 3. Filter Pills Row */}
-      <div className={styles.filterPillsRow}>
-        <button
-          type="button"
-          className={`${styles.filterPill} ${
-            filter === "all" ? styles.filterPillActive : ""
-          }`}
-          onClick={() => setFilter("all")}
-        >
-          الكل
-        </button>
-        <button
-          type="button"
-          className={`${styles.filterPill} ${
-            filter === "unread" ? styles.filterPillActive : ""
-          }`}
-          onClick={() => setFilter("unread")}
-        >
-          غير مقروءة
-        </button>
-        <button
-          type="button"
-          className={`${styles.filterPill} ${
-            filter === "groups" ? styles.filterPillActive : ""
-          }`}
-          onClick={() => setFilter("groups")}
-        >
-          المجموعات
-        </button>
-        <button
-          type="button"
-          className={`${styles.filterPill} ${
-            filter === "favorites" ? styles.filterPillActive : ""
-          }`}
-          onClick={() => setFilter("favorites")}
-        >
-          المفضلة
-        </button>
-        <button
-          type="button"
-          aria-label="Add filter"
-          className={`${styles.filterPill} ${styles.filterPillAdd}`}
-          onClick={handleOpenSupport}
-          title="تواصل مع الدعم الفني"
-        >
-          <span
-            className="material-symbols-outlined"
-            style={{ fontSize: "15px" }}
+      {/* 2. Desktop Workstation Header (Visible on Desktop / PC / Emulator) */}
+      <div className={styles.mobileDesktopHeader}>
+        {/* Desktop Top Header */}
+        <div className={styles.sidebarTopHeader}>
+          <h2 className={styles.sidebarChatsTitle}>Chats</h2>
+          <div className={styles.sidebarHeaderActions}>
+            <button
+              type="button"
+              aria-label="New chat"
+              className={styles.sidebarHeaderIconBtn}
+              onClick={handleOpenSupport}
+              title="محادثة جديدة أو الدعم الفني (#123)"
+              disabled={openingSupport}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: "19px" }}
+              >
+                edit_square
+              </span>
+            </button>
+
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                aria-label="Menu"
+                className={styles.sidebarHeaderIconBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(!showMenu);
+                }}
+                title="القائمة"
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: "19px" }}
+                >
+                  more_vert
+                </span>
+              </button>
+
+              {showMenu && (
+                <div
+                  className="dropdown"
+                  style={{ right: 0, top: "100%", marginTop: 6 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="dropdown-item" onClick={handleOpenSupport}>
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "var(--primary)" }}
+                    >
+                      support_agent
+                    </span>
+                    الدعم الفني (123)
+                  </div>
+                  <div
+                    className="dropdown-item"
+                    onClick={() => setShowMyProfileModal(true)}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px" }}
+                    >
+                      account_circle
+                    </span>
+                    الملف الشخصي
+                  </div>
+                  <div className="dropdown-divider" />
+                  <div
+                    className="dropdown-item dropdown-item-danger"
+                    onClick={handleSignOut}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px" }}
+                    >
+                      logout
+                    </span>
+                    تسجيل الخروج
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop Search Container */}
+        <div className={styles.searchContainer}>
+          <div className={styles.searchInner}>
+            <span
+              className="material-symbols-outlined"
+              style={{ color: "var(--outline)", fontSize: "18px" }}
+            >
+              search
+            </span>
+            <input
+              id="chat-search-input"
+              type="text"
+              placeholder="بحث أو بدء محادثة جديدة..."
+              value={searchQuery}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchQuery(val);
+                handleSearch(val);
+              }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSearchResults([]);
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--outline)",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: "16px" }}
+                >
+                  close
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop Filter Pills */}
+        <div className={styles.filterPillsRow}>
+          <button
+            type="button"
+            className={`${styles.filterPill} ${
+              filter === "all" ? styles.filterPillActive : ""
+            }`}
+            onClick={() => setFilter("all")}
           >
-            add
-          </span>
-        </button>
+            الكل
+          </button>
+          <button
+            type="button"
+            className={`${styles.filterPill} ${
+              filter === "unread" ? styles.filterPillActive : ""
+            }`}
+            onClick={() => setFilter("unread")}
+          >
+            غير مقروءة
+          </button>
+          <button
+            type="button"
+            className={`${styles.filterPill} ${
+              filter === "groups" ? styles.filterPillActive : ""
+            }`}
+            onClick={() => setFilter("groups")}
+          >
+            المجموعات
+          </button>
+          <button
+            type="button"
+            className={`${styles.filterPill} ${
+              filter === "favorites" ? styles.filterPillActive : ""
+            }`}
+            onClick={() => setFilter("favorites")}
+          >
+            المفضلة
+          </button>
+          <button
+            type="button"
+            aria-label="Add filter"
+            className={`${styles.filterPill} ${styles.filterPillAdd}`}
+            onClick={handleOpenSupport}
+            title="تواصل مع الدعم الفني"
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: "15px" }}
+            >
+              add
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* 4. Conversation List */}
@@ -417,6 +661,38 @@ export default function ChatSidebar() {
               </div>
             ))}
           </div>
+        )}
+
+        {/* Mobile Pinned Archived / Support Row */}
+        {filter === "all" && !searchQuery.trim() && (
+          <>
+            <div
+              className={styles.mobileArchivedRow}
+              onClick={handleOpenSupport}
+              title="الدعم الفني الرسمي والمحادثات المؤرشفة"
+            >
+              <div className={styles.mobileArchivedLeft}>
+                <div className={styles.mobileArchivedIcon}>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: "20px" }}
+                  >
+                    archive
+                  </span>
+                </div>
+                <div className={styles.mobileArchivedTexts}>
+                  <span className={styles.mobileArchivedTitle}>
+                    الدعم الفني والمؤرشفة (#123)
+                  </span>
+                  <span className={styles.mobileArchivedSub}>
+                    خدمة العملاء متوفرة دائماً 24/7
+                  </span>
+                </div>
+              </div>
+              <span className={styles.mobileArchivedBadge}>24/7</span>
+            </div>
+            <div className={styles.mobileDividerArchive} />
+          </>
         )}
 
         {/* Pinned Official Support Row */}
@@ -502,86 +778,125 @@ export default function ChatSidebar() {
             const unread = chat.unreadCount?.[userProfile?.uid || ""] || 0;
 
             return (
-              <div
-                key={chat.id}
-                className={`${styles.chatRow} ${
-                  isSelected ? styles.chatRowSelected : ""
-                }`}
-                onClick={() => setActiveChat(chat)}
-              >
-                {/* Avatar */}
+              <React.Fragment key={chat.id}>
                 <div
-                  className={styles.chatRowAvatar}
-                  onClick={(e) => {
-                    if (other.uid && !other.isSupport) {
-                      e.stopPropagation();
-                      setSelectedProfileUser({
-                        uid: other.uid,
-                        displayName: other.name,
-                        userCode: "",
-                      } as any);
-                      setShowProfileModal(true);
-                    }
-                  }}
-                  title="عرض الملف التعريفي"
-                  style={{
-                    cursor: other.uid && !other.isSupport ? "pointer" : "default",
-                  }}
+                  className={`${styles.chatRow} ${
+                    isSelected ? styles.chatRowSelected : ""
+                  }`}
+                  onClick={() => setActiveChat(chat)}
                 >
-                  {other.isSupport ? (
-                    <span
-                      className="material-symbols-outlined"
-                      style={{ fontSize: "24px", color: "var(--primary)" }}
-                    >
-                      support_agent
-                    </span>
-                  ) : (
-                    getInitials(other.name)
-                  )}
-                </div>
-
-                {/* Info */}
-                <div className={styles.chatRowContent}>
-                  <div className={styles.chatRowNameRow}>
-                    <span className={styles.chatRowName}>
-                      {other.name}
-                      {isBlocked && (
-                        <span
-                          style={{
-                            color: "var(--error)",
-                            fontSize: "0.75rem",
-                            marginRight: 4,
-                          }}
-                        >
-                          (محظور 🚫)
-                        </span>
-                      )}
-                    </span>
-                    <span
-                      className={`${styles.chatRowTime} ${
-                        unread > 0 ? styles.chatRowTimeUnread : ""
-                      }`}
-                    >
-                      {formatMessageTime(chat.lastMessage?.createdAt)}
-                    </span>
-                  </div>
-
-                  <div className={styles.chatRowPreviewRow}>
-                    <span className={styles.chatRowPreview}>
-                      {chat.lastMessage?.text || "ابدأ المحادثة..."}
-                    </span>
-                    {unread > 0 && (
-                      <span className={styles.chatRowBadge}>{unread}</span>
+                  {/* Avatar */}
+                  <div
+                    className={styles.chatRowAvatar}
+                    onClick={(e) => {
+                      if (other.uid && !other.isSupport) {
+                        e.stopPropagation();
+                        setSelectedProfileUser({
+                          uid: other.uid,
+                          displayName: other.name,
+                          userCode: "",
+                        } as any);
+                        setShowProfileModal(true);
+                      }
+                    }}
+                    title="عرض الملف التعريفي"
+                    style={{
+                      cursor: other.uid && !other.isSupport ? "pointer" : "default",
+                    }}
+                  >
+                    {other.isSupport ? (
+                      <span
+                        className="material-symbols-outlined"
+                        style={{ fontSize: "24px", color: "var(--primary)" }}
+                      >
+                        support_agent
+                      </span>
+                    ) : (
+                      getInitials(other.name)
+                    )}
+                    {userProfile?.uid && chat.isOnline && (
+                      <span className={styles.chatRowOnlineDot} />
                     )}
                   </div>
+
+                  {/* Info */}
+                  <div className={styles.chatRowContent}>
+                    <div className={styles.chatRowNameRow}>
+                      <span className={styles.chatRowName}>
+                        {other.name}
+                        {isBlocked && (
+                          <span
+                            style={{
+                              color: "var(--error)",
+                              fontSize: "0.75rem",
+                              marginRight: 4,
+                            }}
+                          >
+                            (محظور 🚫)
+                          </span>
+                        )}
+                      </span>
+                      <span
+                        className={`${styles.chatRowTime} ${
+                          unread > 0 ? styles.chatRowTimeUnread : ""
+                        }`}
+                      >
+                        {formatMessageTime(chat.lastMessage?.createdAt)}
+                      </span>
+                    </div>
+
+                    <div className={styles.chatRowPreviewRow}>
+                      <span className={styles.chatRowPreview}>
+                        {chat.lastMessage?.text || "ابدأ المحادثة..."}
+                      </span>
+                      {unread > 0 ? (
+                        <span className={styles.chatRowBadge}>{unread}</span>
+                      ) : (
+                        <span
+                          className="material-symbols-outlined"
+                          style={{
+                            fontSize: "16px",
+                            color: "var(--primary)",
+                            flexShrink: 0,
+                          }}
+                        >
+                          done_all
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+                <div className={styles.mobileDividerChat} />
+              </React.Fragment>
             );
           })
         )}
       </div>
 
-      {/* Profile Modal */}
+      {/* Floating Action Button (FAB) */}
+      <button
+        type="button"
+        aria-label="Start new conversation"
+        className={styles.mobileFab}
+        onClick={handleOpenSupport}
+        title="بدء محادثة جديدة أو التواصل مع الدعم"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: "26px" }}>
+          chat
+        </span>
+      </button>
+
+      {/* Hidden Camera Input for Mobile */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={handleCameraFileChange}
+      />
+
+      {/* Profile Modal for Other Users */}
       <UserProfileModal
         isOpen={showProfileModal}
         onClose={() => {
@@ -611,6 +926,24 @@ export default function ChatSidebar() {
         }}
         isSupport={selectedProfileUser?.userCode === "123"}
       />
+
+      {/* Profile Modal for Current User */}
+      {userProfile && (
+        <UserProfileModal
+          isOpen={showMyProfileModal}
+          onClose={() => setShowMyProfileModal(false)}
+          user={{
+            uid: userProfile.uid,
+            displayName: userProfile.displayName,
+            userCode: userProfile.userCode,
+            bio: userProfile.bio,
+            isOnline: true,
+          }}
+          isBlocked={false}
+          onToggleBlock={async () => {}}
+          isSupport={userProfile.userCode === "123"}
+        />
+      )}
     </aside>
   );
 }

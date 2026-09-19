@@ -423,6 +423,7 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
             onClick={(e) => {
               e.stopPropagation();
               setActiveChat(null);
+              router.push("/chat");
             }}
             title="رجوع"
           >

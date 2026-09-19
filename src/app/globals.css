@@ -3,19 +3,22 @@
 /* ========== DESIGN TOKENS (WhatsApp Web Workstation Dark) ========== */
 :root {
   /* Palette Tokens from Workstation Spec */
+  --surface: #131313;
+  --surface-dim: #131313;
   --surface-container-lowest: #0e0e0e;
   --surface-container-low: #1c1b1b;
   --surface-container: #201f1f;
   --surface-container-high: #2a2a2a;
   --surface-container-highest: #353534;
   --on-secondary: #303030;
+  --on-surface: #e5e2e1;
+  --on-surface-variant: #bccac2;
   --primary: #59dcb5;
   --primary-dark: #006b53;
   --primary-container: #00a884;
   --on-primary-container: #003427;
   --secondary: #c8c6c5;
   --secondary-container: #474746;
-  --on-surface: #e5e2e1;
   --outline: #86948d;
   --outline-variant: #3d4a44;
   --secondary-fixed: #e5e2e1;
