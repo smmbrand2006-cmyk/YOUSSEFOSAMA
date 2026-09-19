@@ -99,31 +99,67 @@ export async function dispatchAppNotification({
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
 
-  try {
-    if ("serviceWorker" in navigator) {
-      const reg = await navigator.serviceWorker.ready;
-      if (reg && reg.showNotification) {
-        await reg.showNotification(title, {
-          body,
-          icon,
-          badge: "/icons/icon-192.png",
-          vibrate: [150, 60, 150],
-          tag: tag || `app-notif-${Date.now()}`,
-          data: { url },
-        } as any);
-        return;
-      }
-    }
+  const notifOptions = {
+    body,
+    icon,
+    badge: "/icons/icon-192.png",
+    vibrate: [200, 100, 200],
+    tag: tag || `app-notif-${Date.now()}`,
+    data: { url },
+  };
 
-    // Fallback standard notification
-    new Notification(title, {
-      body,
-      icon,
-      tag: tag || `app-notif-${Date.now()}`,
-    });
-  } catch (err) {
-    console.warn("Failed to dispatch notification:", err);
+  let shown = false;
+
+  // 1. Try sending directly to ServiceWorker via postMessage
+  if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+    try {
+      navigator.serviceWorker.controller.postMessage({
+        type: "SHOW_NOTIFICATION",
+        title,
+        options: notifOptions,
+      });
+      shown = true;
+    } catch (e) {
+      console.warn("postMessage to SW failed:", e);
+    }
   }
+
+  // 2. Try reg.showNotification with timeout
+  if (!shown && "serviceWorker" in navigator) {
+    try {
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<null>((res) => setTimeout(() => res(null), 500)),
+      ]);
+      if (reg && reg.showNotification) {
+        await reg.showNotification(title, notifOptions as any);
+        shown = true;
+      }
+    } catch (swErr) {
+      console.warn("SW showNotification failed:", swErr);
+    }
+  }
+
+  // 3. Fallback standard DOM notification
+  if (!shown) {
+    try {
+      new Notification(title, notifOptions as any);
+    } catch (domErr) {
+      console.warn("DOM notification failed:", domErr);
+    }
+  }
+}
+
+export async function testSystemNotification(): Promise<boolean> {
+  const granted = await requestBrowserNotifications();
+  if (!granted) return false;
+  playNotificationChime();
+  await dispatchAppNotification({
+    title: "إشعار تجريبي من Youssef App 🚀",
+    body: "تهانينا! الإشعارات تعمل بنجاح وستصلك كافة الرسائل والمكالمات في الوقت الفعلي.",
+    url: "/chat",
+  });
+  return true;
 }
 
 // PWA Utilities

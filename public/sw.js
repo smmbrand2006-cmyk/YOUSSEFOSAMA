@@ -117,5 +117,18 @@ self.addEventListener('notificationclick', (event) => {
         return self.clients.openWindow(targetUrl);
       }
     })
-  );
+// Handle direct messages to show system notifications
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = event.data;
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        vibrate: [200, 100, 200],
+        ...options,
+      })
+    );
+  }
 });
+

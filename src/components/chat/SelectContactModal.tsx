@@ -7,6 +7,7 @@ import {
   collection,
   query,
   limit,
+  where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { getOrCreateDirectChat, getChatDoc } from "@/lib/firebase/firestore";
@@ -47,54 +48,95 @@ export default function SelectContactModal({
   const [newContactCode, setNewContactCode] = useState("");
   const [openingChat, setOpeningChat] = useState<string | null>(null);
 
-  // Fetch users on open
+  // Fetch users only when searching or fetching contacts
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
-    setLoading(true);
+    const cleanQ = searchQuery.trim().replace(/^#/, "");
 
-    const fetchUsers = async () => {
-      try {
-        const q = query(collection(db, "users"), limit(100));
-        const snap = await getDocs(q);
-        const list: UserProfile[] = [];
-        snap.forEach((doc) => {
-          const data = doc.data() as UserProfile;
-          if (data && data.uid) {
-            list.push(data);
+    // If no search query, only load contacts user already has
+    if (!cleanQ) {
+      if (currentUser?.contacts && currentUser.contacts.length > 0) {
+        setLoading(true);
+        const fetchExistingContacts = async () => {
+          try {
+            const list: UserProfile[] = [];
+            for (const cUid of (currentUser.contacts || []).slice(0, 50)) {
+              const uDoc = await getDocs(query(collection(db, "users"), where("uid", "==", cUid), limit(1)));
+              if (!uDoc.empty) {
+                list.push(uDoc.docs[0].data() as UserProfile);
+              }
+            }
+            if (isMounted) setUsers(list);
+          } catch (err) {
+            console.error("Failed to fetch user contacts:", err);
+          } finally {
+            if (isMounted) setLoading(false);
           }
+        };
+        fetchExistingContacts();
+      } else {
+        setUsers([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Active search: search by exact userCode or displayName
+    setLoading(true);
+    const searchTarget = async () => {
+      try {
+        const results: UserProfile[] = [];
+        
+        // 1. Search by userCode
+        const codeQ = query(
+          collection(db, "users"),
+          where("userCode", "==", cleanQ),
+          limit(5)
+        );
+        const codeSnap = await getDocs(codeQ);
+        codeSnap.forEach((d) => {
+          const u = d.data() as UserProfile;
+          if (u.uid !== currentUser?.uid) results.push(u);
         });
-        if (isMounted) {
-          setUsers(list);
+
+        // 2. Search by displayName if fewer than 5 results
+        if (results.length === 0) {
+          const nameQ = query(
+            collection(db, "users"),
+            where("displayName", ">=", cleanQ),
+            where("displayName", "<=", cleanQ + "\uf8ff"),
+            limit(10)
+          );
+          const nameSnap = await getDocs(nameQ);
+          nameSnap.forEach((d) => {
+            const u = d.data() as UserProfile;
+            if (u.uid !== currentUser?.uid && !results.some((r) => r.uid === u.uid)) {
+              results.push(u);
+            }
+          });
         }
+
+        if (isMounted) setUsers(results);
       } catch (err) {
-        console.error("Failed to fetch contacts:", err);
+        console.error("Failed to search user:", err);
       } finally {
         if (isMounted) setLoading(false);
       }
     };
 
-    fetchUsers();
-
+    const debounceTimer = setTimeout(searchTarget, 250);
     return () => {
       isMounted = false;
+      clearTimeout(debounceTimer);
     };
-  }, [isOpen]);
+  }, [isOpen, searchQuery, currentUser?.uid, currentUser?.contacts]);
 
   if (!isOpen) return null;
 
-  // Filter contacts
-  const otherContacts = users.filter((u) => u.uid !== currentUser?.uid);
-  const filteredContacts = otherContacts.filter((u) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase().trim();
-    return (
-      u.displayName?.toLowerCase().includes(q) ||
-      u.userCode?.toLowerCase().includes(q) ||
-      u.bio?.toLowerCase().includes(q)
-    );
-  });
+  // Filter contacts (exclude self)
+  const filteredContacts = users.filter((u) => u.uid !== currentUser?.uid);
 
   const handleSelectUser = async (targetUser: UserProfile) => {
     if (!currentUser) return;
@@ -256,7 +298,7 @@ export default function SelectContactModal({
                   fontSize: "0.8rem",
                 }}
               >
-                {otherContacts.length} contacts
+                {filteredContacts.length} جهات اتصال
               </span>
             </div>
           </div>
@@ -605,12 +647,15 @@ export default function SelectContactModal({
             <div
               style={{
                 textAlign: "center",
-                padding: "30px 20px",
+                padding: "36px 24px",
                 color: "#8696a0",
-                fontSize: "0.9rem",
+                fontSize: "0.92rem",
+                lineHeight: "1.6",
               }}
             >
-              {searchQuery ? "لا توجد جهات اتصال مطابقة للبحث" : "لا توجد جهات اتصال أخرى مسجلة حالياً"}
+              {searchQuery
+                ? `لا يوجد مستخدم يطابق البحث "${searchQuery}". تأكد من صحة كود المستخدم #`
+                : "🔒 للحفاظ على الخصوصية، استخدم شريط البحث بالأعلى للبحث عن صديقك بكوده الخاص (#كود) أو اسمه وبدء المحادثة معه فوراً!"}
             </div>
           ) : (
             filteredContacts.map((user) => (

@@ -15,7 +15,9 @@ import {
   Shield,
   Copy,
   Headphones,
+  Bell,
 } from "lucide-react";
+import { testSystemNotification } from "@/lib/utils/pwaNotifications";
 import styles from "@/styles/auth.module.css";
 
 export default function ProfilePage() {
@@ -296,6 +298,36 @@ export default function ProfilePage() {
 
       {/* Actions */}
       <div style={{ padding: "0 20px 30px", marginTop: "auto" }}>
+        {/* زر تجربة الإشعار الفوري */}
+        <button
+          onClick={async () => {
+            const success = await testSystemNotification();
+            if (!success) {
+              alert("يرجى تفعيل إذن الإشعارات من إعدادات المتصفح أولاً 🔒");
+            }
+          }}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            padding: "14px",
+            background: "linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(79, 70, 229, 0.15))",
+            color: "#818CF8",
+            border: "1px solid rgba(99, 102, 241, 0.4)",
+            borderRadius: "var(--radius-md)",
+            cursor: "pointer",
+            fontWeight: 700,
+            fontSize: "0.95rem",
+            marginBottom: 12,
+            transition: "all 0.2s",
+          }}
+        >
+          <Bell size={18} />
+          تجربة إشعار فوري على هاتفك الآن 🔔
+        </button>
+
         {/* زر الدعم الفني (#123) */}
         <button
           onClick={handleSupportChat}

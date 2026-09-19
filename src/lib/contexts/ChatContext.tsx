@@ -61,9 +61,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             const isDifferentChat = activeChatRef.current?.id !== chat.id;
 
             if (isWindowHidden || isDifferentChat) {
+              const senderName =
+                chat.participantNames?.[chat.lastMessage?.senderId || ""] ||
+                (chat.type === "direct" ? "رسالة جديدة 💬" : (chat.name || "رسالة جديدة 💬"));
               playNotificationChime();
               dispatchAppNotification({
-                title: chat.type === "direct" ? "رسالة جديدة 💬" : (chat.name || "رسالة جماعية 💬"),
+                title: `${senderName} 💬`,
                 body: chat.lastMessage?.text || "أرسل لك رسالة جديدة",
                 tag: `msg-${chat.id}`,
                 url: `/chat/${chat.id}`,

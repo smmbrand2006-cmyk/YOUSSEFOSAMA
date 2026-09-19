@@ -4,20 +4,38 @@ import React, { useState, useEffect } from "react";
 import {
   getNotificationStatus,
   requestBrowserNotifications,
+  testSystemNotification,
   NotificationStatus,
 } from "@/lib/utils/pwaNotifications";
 import styles from "@/styles/pwa.module.css";
-import { Bell, ShieldCheck, Zap, PhoneCall, RefreshCw, AlertTriangle } from "lucide-react";
+import {
+  Bell,
+  Mic,
+  Camera,
+  CheckCircle2,
+  RefreshCw,
+  AlertTriangle,
+  Send,
+} from "lucide-react";
 
 export default function MandatoryNotificationModal() {
   const [status, setStatus] = useState<NotificationStatus>("granted");
+  const [micGranted, setMicGranted] = useState(false);
+  const [camGranted, setCamGranted] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isTestingNotif, setIsTestingNotif] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     const current = getNotificationStatus();
     setStatus(current);
+
+    // Check if permissions were previously confirmed
+    const confirmed = localStorage.getItem("youssef_permissions_confirmed");
+    if (confirmed && current === "granted") {
+      setStatus("granted");
+    }
 
     const handleFocus = () => {
       setStatus(getNotificationStatus());
@@ -27,21 +45,56 @@ export default function MandatoryNotificationModal() {
     return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
-  if (!mounted || status === "granted" || status === "unsupported") {
+  if (!mounted || (status === "granted" && localStorage.getItem("youssef_permissions_confirmed") === "true") || status === "unsupported") {
     return null;
   }
 
-  const handleRequest = async () => {
+  const handleRequestAll = async () => {
     setLoading(true);
     try {
-      const granted = await requestBrowserNotifications();
-      if (granted) {
-        setStatus("granted");
-      } else {
-        setStatus(getNotificationStatus());
+      // 1. Request Notifications
+      const notifResult = await requestBrowserNotifications();
+
+      // 2. Request Microphone
+      try {
+        if (navigator.mediaDevices?.getUserMedia) {
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          audioStream.getTracks().forEach((t) => t.stop());
+          setMicGranted(true);
+        }
+      } catch (err) {
+        console.warn("Microphone permission note:", err);
+      }
+
+      // 3. Request Camera
+      try {
+        if (navigator.mediaDevices?.getUserMedia) {
+          const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          videoStream.getTracks().forEach((t) => t.stop());
+          setCamGranted(true);
+        }
+      } catch (err) {
+        console.warn("Camera permission note:", err);
+      }
+
+      const notifNow = getNotificationStatus();
+      setStatus(notifNow);
+      if (notifNow === "granted" || notifResult) {
+        try {
+          localStorage.setItem("youssef_permissions_confirmed", "true");
+        } catch {}
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    setIsTestingNotif(true);
+    try {
+      await testSystemNotification();
+    } finally {
+      setIsTestingNotif(false);
     }
   };
 
@@ -49,9 +102,11 @@ export default function MandatoryNotificationModal() {
     const current = getNotificationStatus();
     setStatus(current);
     if (current === "granted") {
-      // Permission acquired!
+      try {
+        localStorage.setItem("youssef_permissions_confirmed", "true");
+      } catch {}
     } else {
-      alert("لم يتم تفعيل الإذن بعد من إعدادات المتصفح. تأكد من تحويل خيار الإشعارات إلى (سماح/Allow) في شريط العنوان.");
+      alert("لم يتم تفعيل إذن الإشعارات بعد في المتصفح. اضغط على رمز القفل 🔒 أعلى شريط العنوان وقم باختيار (سماح/Allow) للإشعارات.");
     }
   };
 
@@ -67,15 +122,15 @@ export default function MandatoryNotificationModal() {
 
         <div className={styles.notifBadge}>
           <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>
-            error
+            verified_user
           </span>
-          إذن مطلوب للاستمرار
+          تفعيل أذونات التطبيق
         </div>
 
-        <h2 className={styles.notifTitle}>تفعيل إشعارات المتصفح</h2>
+        <h2 className={styles.notifTitle}>أذونات التشغيل قبل التنزيل</h2>
 
         <p className={styles.notifDesc}>
-          لاستقبال رسائل الشات والمكالمات في الوقت الحقيقي وفور وصولها حتى عند إغلاق التطبيق أو وجوده في الخلفية، يلزم تفعيل إذن الإشعارات من المتصفح.
+          لضمان عمل الفويس (الرسائل الصوتية)، وإرسال الصور، واستقبال الرسائل والمكالمات فورياً حتى لو التطبيق مغلق، يُرجى تفعيل الأذونات التالية:
         </p>
 
         {status === "denied" ? (
@@ -93,40 +148,65 @@ export default function MandatoryNotificationModal() {
         ) : (
           <div className={styles.notifFeatures}>
             <div className={styles.notifFeatureItem}>
-              <Zap className={styles.notifFeatureIcon} size={18} />
-              <span>استلام تنبيه فوري بالرسائل الجديدة فور إرسالها</span>
+              <Bell className={styles.notifFeatureIcon} size={18} />
+              <span>الإشعارات الفورية: تنبيه بالرسائل والمكالمات في الخلفية</span>
             </div>
             <div className={styles.notifFeatureItem}>
-              <PhoneCall className={styles.notifFeatureIcon} size={18} />
-              <span>رنين وتنبيه المكالمات الصوتية والمرئية الواردة</span>
+              <Mic className={styles.notifFeatureIcon} size={18} />
+              <span>الميكروفون والصوت: لتسجيل الفويس والمكالمات الصوتية</span>
             </div>
             <div className={styles.notifFeatureItem}>
-              <ShieldCheck className={styles.notifFeatureIcon} size={18} />
-              <span>مزامنة مشفرة وآمنة تعمل في الخلفية</span>
+              <Camera className={styles.notifFeatureIcon} size={18} />
+              <span>الكاميرا والصور: لإرسال الصور والتقاطها ومكالمات الفيديو</span>
             </div>
           </div>
         )}
 
-        {status === "denied" ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {status === "denied" ? (
+            <button
+              type="button"
+              className={styles.notifBtnPrimary}
+              onClick={handleManualCheck}
+            >
+              <RefreshCw size={18} />
+              تم السماح، إعادة التحقق والبدء
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.notifBtnPrimary}
+              onClick={handleRequestAll}
+              disabled={loading}
+            >
+              <CheckCircle2 size={18} />
+              {loading ? "جاري تفعيل الأذونات..." : "تفعيل كافة الأذونات (إشعارات + فويس + صور) 🚀"}
+            </button>
+          )}
+
           <button
             type="button"
-            className={styles.notifBtnPrimary}
-            onClick={handleManualCheck}
+            onClick={handleTestNotification}
+            disabled={isTestingNotif}
+            style={{
+              padding: "10px 16px",
+              background: "rgba(255, 255, 255, 0.06)",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              borderRadius: "14px",
+              color: "#C7D2FE",
+              fontSize: "13px",
+              fontWeight: "600",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+            }}
           >
-            <RefreshCw size={18} />
-            تم السماح، إعادة التحقق والبدء
+            <Send size={14} />
+            {isTestingNotif ? "جاري إرسال الإشعار..." : "تجربة إشعار فوري على هاتفك الآن 🔔"}
           </button>
-        ) : (
-          <button
-            type="button"
-            className={styles.notifBtnPrimary}
-            onClick={handleRequest}
-            disabled={loading}
-          >
-            <Bell size={18} />
-            {loading ? "جاري التفعيل..." : "تفعيل الإشعارات الآن 🔔"}
-          </button>
-        )}
+        </div>
       </div>
     </div>
   );
