@@ -48,7 +48,7 @@ export default function ChatMainPage() {
         </span>
       </div>
 
-      <h2>Youssef App • Workstation</h2>
+      <h2>YOUSSEF APP</h2>
       <p>
         أرسل واستقبل الرسائل والمكالمات في الوقت الفعلي بأعلى درجات الخصوصية والتشفير.
         <br />

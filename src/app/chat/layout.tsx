@@ -9,6 +9,7 @@ import AppHeader from "@/components/chat/AppHeader";
 import ChatSidebar from "@/components/chat/ChatSidebar";
 import MobileBottomNav from "@/components/chat/MobileBottomNav";
 import UserProfileModal from "@/components/chat/UserProfileModal";
+import StatusModal from "@/components/chat/StatusModal";
 import styles from "@/styles/chat.module.css";
 
 export default function ChatLayout({
@@ -20,6 +21,7 @@ export default function ChatLayout({
   const { activeChat } = useChats();
   const router = useRouter();
   const [showMyProfile, setShowMyProfile] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
   const [mobileTab, setMobileTab] = useState("chats");
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export default function ChatLayout({
   if (loading) {
     return (
       <div className="loading-screen">
-        <h1>Youssef App</h1>
+        <h1>YOUSSEF APP</h1>
         <div className="loading-spinner" />
       </div>
     );
@@ -49,7 +51,14 @@ export default function ChatLayout({
   return (
     <div className={styles.chatLayout}>
       {/* 1. Leftmost 70px Icon Rail */}
-      <AppNavRail onOpenProfile={() => setShowMyProfile(true)} />
+      <AppNavRail
+        onOpenProfile={() => setShowMyProfile(true)}
+        onSelectTab={(tab) => {
+          if (tab === "status") {
+            setShowStatusModal(true);
+          }
+        }}
+      />
 
       {/* 2. Main Wrapper with 70px Left Offset & 56px Top Header */}
       <div className={styles.appMainWrapper}>
@@ -73,16 +82,23 @@ export default function ChatLayout({
           onTabChange={(tab) => setMobileTab(tab)}
           onOpenSettings={() => setShowMyProfile(true)}
           onOpenCalls={() => {
-            alert("ميزة سجل المكالمات قيد الإعداد!");
+            alert("سجل المكالمات: لا توجد مكالمات فائتة حتى الآن.");
           }}
           onOpenCommunities={() => {
             setMobileTab("communities");
           }}
           onOpenStatus={() => {
-            alert("ميزة الحالات (Status) قريباً في التحديث القادم!");
+            setShowStatusModal(true);
           }}
         />
       )}
+
+      {/* Status / Stories Modal */}
+      <StatusModal
+        isOpen={showStatusModal}
+        onClose={() => setShowStatusModal(false)}
+        currentUser={userProfile}
+      />
 
       {/* Current User Profile Modal */}
       {userProfile && (

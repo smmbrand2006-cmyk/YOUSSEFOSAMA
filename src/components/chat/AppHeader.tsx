@@ -27,7 +27,7 @@ export default function AppHeader({
       {/* Brand Title */}
       <div className={styles.appHeaderLeft}>
         <div className={styles.appHeaderTitle}>
-          <span>Workstation</span>
+          <span>YOUSSEF APP</span>
           <span className={styles.appHeaderDot} />
         </div>
         {userProfile?.userCode && (

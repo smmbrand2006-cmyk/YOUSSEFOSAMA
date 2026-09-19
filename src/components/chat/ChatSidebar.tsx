@@ -16,6 +16,7 @@ import { signOut } from "@/lib/firebase/auth";
 import { UserProfile } from "@/lib/types/user";
 import { formatMessageTime } from "@/lib/utils/formatDate";
 import UserProfileModal from "./UserProfileModal";
+import CreateGroupModal from "./CreateGroupModal";
 import styles from "@/styles/chat.module.css";
 
 type FilterType = "all" | "unread" | "groups" | "favorites";
@@ -30,12 +31,35 @@ export default function ChatSidebar() {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [searching, setSearching] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showFabMenu, setShowFabMenu] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [openingSupport, setOpeningSupport] = useState(false);
   const [selectedProfileUser, setSelectedProfileUser] = useState<UserProfile | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showMyProfileModal, setShowMyProfileModal] = useState(false);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
   const mobileSearchInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Extract contact list from existing chats for the group picker
+  const existingContacts = React.useMemo(() => {
+    const list: UserProfile[] = [];
+    const seen = new Set<string>();
+    chats.forEach((c) => {
+      if (c.type === "direct" && c.participants) {
+        const otherUid = c.participants.find((p) => p !== userProfile?.uid);
+        if (otherUid && !seen.has(otherUid) && otherUid !== "support_official_123") {
+          seen.add(otherUid);
+          list.push({
+            uid: otherUid,
+            displayName: c.participantNames?.[otherUid] || "مستخدم",
+            userCode: "",
+            isOnline: false,
+          });
+        }
+      }
+    });
+    return list;
+  }, [chats, userProfile]);
 
   const handleCameraClick = () => {
     cameraInputRef.current?.click();
@@ -137,7 +161,15 @@ export default function ChatSidebar() {
   };
 
   const getOtherParticipant = (chat: any) => {
-    if (!userProfile) return { uid: "", name: "Unknown" };
+    if (!userProfile) return { uid: "", name: "Unknown", isSupport: false, isGroup: false };
+    if (chat.type === "group") {
+      return {
+        uid: "",
+        name: chat.groupName || "مجموعة جديدة 👥",
+        isSupport: false,
+        isGroup: true,
+      };
+    }
     const otherId = chat.participants?.find(
       (id: string) => id !== userProfile.uid
     );
@@ -150,12 +182,14 @@ export default function ChatSidebar() {
         uid: "support_official_123",
         name: "الدعم الفني (123) 🎧",
         isSupport: true,
+        isGroup: false,
       };
     }
     return {
       uid: otherId || "",
       name: chat.participantNames?.[otherId] || "مستخدم",
       isSupport: false,
+      isGroup: false,
     };
   };
 
@@ -271,6 +305,36 @@ export default function ChatSidebar() {
                   style={{ right: 0, top: "100%", marginTop: 6 }}
                   onClick={(e) => e.stopPropagation()}
                 >
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowCreateGroupModal(true);
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "var(--primary)" }}
+                    >
+                      group_add
+                    </span>
+                    إنشاء مجموعة جديدة
+                  </div>
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      mobileSearchInputRef.current?.focus();
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#60a5fa" }}
+                    >
+                      person_search
+                    </span>
+                    محادثة مباشرة جديدة (بحث)
+                  </div>
                   <div className="dropdown-item" onClick={handleOpenSupport}>
                     <span
                       className="material-symbols-outlined"
@@ -438,8 +502,8 @@ export default function ChatSidebar() {
               type="button"
               aria-label="New chat"
               className={styles.sidebarHeaderIconBtn}
-              onClick={handleOpenSupport}
-              title="محادثة جديدة أو الدعم الفني (#123)"
+              onClick={() => setShowFabMenu(!showFabMenu)}
+              title="محادثة جديدة أو مجموعة (#123)"
               disabled={openingSupport}
             >
               <span
@@ -475,6 +539,37 @@ export default function ChatSidebar() {
                   style={{ right: 0, top: "100%", marginTop: 6 }}
                   onClick={(e) => e.stopPropagation()}
                 >
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowCreateGroupModal(true);
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "var(--primary)" }}
+                    >
+                      group_add
+                    </span>
+                    إنشاء مجموعة جديدة
+                  </div>
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
+                      const inp = document.getElementById("chat-search-input");
+                      inp?.focus();
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#60a5fa" }}
+                    >
+                      person_search
+                    </span>
+                    محادثة مباشرة جديدة (بحث)
+                  </div>
                   <div className="dropdown-item" onClick={handleOpenSupport}>
                     <span
                       className="material-symbols-outlined"
@@ -811,6 +906,13 @@ export default function ChatSidebar() {
                       >
                         support_agent
                       </span>
+                    ) : (other as any).isGroup ? (
+                      <span
+                        className="material-symbols-outlined"
+                        style={{ fontSize: "24px", color: "var(--primary)" }}
+                      >
+                        groups
+                      </span>
                     ) : (
                       getInitials(other.name)
                     )}
@@ -873,16 +975,94 @@ export default function ChatSidebar() {
         )}
       </div>
 
+      {/* Floating Action Button (FAB Menu Backdrop & Modal) */}
+      {showFabMenu && (
+        <>
+          <div
+            className={styles.fabBackdrop}
+            onClick={() => setShowFabMenu(false)}
+          />
+          <div className={styles.fabMenuContainer}>
+            <button
+              type="button"
+              className={styles.fabMenuItem}
+              onClick={() => {
+                setShowFabMenu(false);
+                setShowCreateGroupModal(true);
+              }}
+            >
+              <div
+                className={styles.fabMenuIconWrap}
+                style={{ background: "rgba(0, 168, 132, 0.15)", color: "var(--primary)" }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+                  group_add
+                </span>
+              </div>
+              <div className={styles.fabMenuText}>
+                <span className={styles.fabMenuTitle}>إنشاء مجموعة جديدة</span>
+                <span className={styles.fabMenuSub}>أضف أعضاء وأنشئ مجموعة دردشة</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className={styles.fabMenuItem}
+              onClick={() => {
+                setShowFabMenu(false);
+                const inp = mobileSearchInputRef.current || document.getElementById("chat-search-input");
+                inp?.focus();
+              }}
+            >
+              <div
+                className={styles.fabMenuIconWrap}
+                style={{ background: "rgba(59, 130, 246, 0.15)", color: "#60a5fa" }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+                  person_search
+                </span>
+              </div>
+              <div className={styles.fabMenuText}>
+                <span className={styles.fabMenuTitle}>محادثة مباشرة جديدة</span>
+                <span className={styles.fabMenuSub}>ابحث بالاسم أو كود المستخدم #</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className={styles.fabMenuItem}
+              onClick={() => {
+                setShowFabMenu(false);
+                handleOpenSupport();
+              }}
+            >
+              <div
+                className={styles.fabMenuIconWrap}
+                style={{ background: "rgba(245, 158, 11, 0.15)", color: "#f59e0b" }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+                  support_agent
+                </span>
+              </div>
+              <div className={styles.fabMenuText}>
+                <span className={styles.fabMenuTitle}>الدعم الفني الرسمي (#123)</span>
+                <span className={styles.fabMenuSub}>تواصل فوري مع فريق الدعم</span>
+              </div>
+            </button>
+          </div>
+        </>
+      )}
+
       {/* Floating Action Button (FAB) */}
       <button
         type="button"
-        aria-label="Start new conversation"
+        aria-label="Start new conversation or group"
         className={styles.mobileFab}
-        onClick={handleOpenSupport}
-        title="بدء محادثة جديدة أو التواصل مع الدعم"
+        onClick={() => setShowFabMenu(!showFabMenu)}
+        title="بدء محادثة جديدة أو إنشاء مجموعة أو التواصل مع الدعم"
       >
         <span className="material-symbols-outlined" style={{ fontSize: "26px" }}>
-          chat
+          {showFabMenu ? "close" : "chat"}
         </span>
       </button>
 
@@ -895,6 +1075,28 @@ export default function ChatSidebar() {
         style={{ display: "none" }}
         onChange={handleCameraFileChange}
       />
+
+      {/* Create Group Modal */}
+      {userProfile && (
+        <CreateGroupModal
+          isOpen={showCreateGroupModal}
+          onClose={() => setShowCreateGroupModal(false)}
+          currentUser={userProfile}
+          existingContacts={existingContacts}
+          onGroupCreated={async (newChatId) => {
+            setShowCreateGroupModal(false);
+            try {
+              const groupChatDoc = await getChatDoc(newChatId);
+              if (groupChatDoc) {
+                setActiveChat(groupChatDoc);
+              }
+              router.push(`/chat/${newChatId}`);
+            } catch (e) {
+              console.error("Error activating new group chat:", e);
+            }
+          }}
+        />
+      )}
 
       {/* Profile Modal for Other Users */}
       <UserProfileModal

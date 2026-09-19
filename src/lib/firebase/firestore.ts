@@ -20,35 +20,44 @@ import { db } from "./config";
 import { Chat, FriendRequest } from "@/lib/types/chat";
 import { Message } from "@/lib/types/message";
 import { UserProfile } from "@/lib/types/user";
+import { encryptMessageText, decryptMessageText } from "@/lib/utils/encryption";
 
 // ==================== USER OPERATIONS ====================
 
 /**
- * Search users by code or name
+ * Search users by code or name (case-insensitive & handles #)
  */
 export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
-  const results: UserProfile[] = [];
+  const cleanTerm = searchTerm.replace(/^#/, "").trim();
+  if (!cleanTerm) return [];
 
-  // Search by user code (exact match)
+  const resultsMap = new Map<string, UserProfile>();
+
+  // 1. Exact match by user code
   const codeQuery = query(
     collection(db, "users"),
-    where("userCode", "==", searchTerm)
+    where("userCode", "==", cleanTerm)
   );
   const codeSnap = await getDocs(codeQuery);
-  codeSnap.forEach((d) => results.push(d.data() as UserProfile));
+  codeSnap.forEach((d) => resultsMap.set(d.id, d.data() as UserProfile));
 
-  // Search by display name (starts with)
-  if (results.length === 0) {
-    const nameQuery = query(
-      collection(db, "users"),
-      where("displayName", ">=", searchTerm),
-      where("displayName", "<=", searchTerm + "\uf8ff")
-    );
-    const nameSnap = await getDocs(nameQuery);
-    nameSnap.forEach((d) => results.push(d.data() as UserProfile));
-  }
+  // 2. Search users with case-insensitive matching
+  const allUsersQuery = query(collection(db, "users"), limit(150));
+  const allSnap = await getDocs(allUsersQuery);
+  const lower = cleanTerm.toLowerCase();
 
-  return results;
+  allSnap.forEach((d) => {
+    const u = d.data() as UserProfile;
+    if (
+      u.userCode?.toLowerCase().includes(lower) ||
+      u.displayName?.toLowerCase().includes(lower) ||
+      u.email?.toLowerCase().includes(lower)
+    ) {
+      resultsMap.set(d.id, u);
+    }
+  });
+
+  return Array.from(resultsMap.values());
 }
 
 /**
@@ -254,7 +263,11 @@ export function listenToChats(
     (snapshot) => {
       const chatsList: Chat[] = [];
       snapshot.forEach((d) => {
-        chatsList.push({ id: d.id, ...d.data() } as Chat);
+        const chatData = { id: d.id, ...d.data() } as Chat;
+        if (chatData.lastMessage?.text) {
+          chatData.lastMessage.text = decryptMessageText(chatData.lastMessage.text);
+        }
+        chatsList.push(chatData);
       });
       // Sort client-side: pinned first, then by last message time or createdAt
       chatsList.sort((a, b) => {
@@ -299,7 +312,21 @@ export function listenToMessages(
     (snapshot) => {
       const msgs: Message[] = [];
       snapshot.forEach((d) => {
-        msgs.push({ id: d.id, ...d.data() } as Message);
+        const raw = d.data() as Message;
+        const decryptedText = decryptMessageText(raw.text);
+        let decryptedReplyTo = raw.replyTo;
+        if (raw.replyTo?.text) {
+          decryptedReplyTo = {
+            ...raw.replyTo,
+            text: decryptMessageText(raw.replyTo.text),
+          };
+        }
+        msgs.push({
+          id: d.id,
+          ...raw,
+          text: decryptedText,
+          replyTo: decryptedReplyTo,
+        } as Message);
       });
       // Sort oldest to newest for chronological chat timeline
       msgs.sort((a, b) => {
@@ -319,7 +346,7 @@ export function listenToMessages(
 }
 
 /**
- * Send a text or media message with sub-second instant delivery
+ * Send a text or media message with sub-second instant delivery and dynamic rotating encryption
  */
 export async function sendMessage(
   chatId: string,
@@ -329,10 +356,21 @@ export async function sendMessage(
   extra: Record<string, any> = {}
 ): Promise<string> {
   const now = Date.now();
+  // Encrypt message text with dynamic daily cipher before saving to database
+  const encryptedText = encryptMessageText(text);
+
+  let extraProcessed = { ...extra };
+  if (extraProcessed.replyTo && extraProcessed.replyTo.text) {
+    extraProcessed.replyTo = {
+      ...extraProcessed.replyTo,
+      text: encryptMessageText(extraProcessed.replyTo.text),
+    };
+  }
+
   const messageData = {
     senderId,
     senderName,
-    text,
+    text: encryptedText,
     type: extra.type || "text",
     reactions: {},
     isEdited: false,
@@ -340,7 +378,7 @@ export async function sendMessage(
     deletedFor: [],
     clientTimestamp: now,
     createdAt: serverTimestamp(),
-    ...extra,
+    ...extraProcessed,
   };
 
   // 1. Add message doc immediately (parallelized)
@@ -349,14 +387,15 @@ export async function sendMessage(
     messageData
   );
 
-  // 2. Update chat lastMessage in parallel
+  // 2. Update chat lastMessage in parallel (with encrypted text)
   const updateChatPromise = updateDoc(doc(db, "chats", chatId), {
     lastMessage: {
-      text,
+      text: encryptedText,
       senderId,
       type: extra.type || "text",
       createdAt: serverTimestamp(),
     },
+    updatedAt: serverTimestamp(),
   }).catch((e) => console.warn("Failed to update chat lastMessage:", e));
 
   const [msgRef] = await Promise.all([addMsgPromise, updateChatPromise]);
@@ -664,13 +703,92 @@ export async function getOrCreateDirectChat(
 }
 
 /**
+ * Create a new group conversation with multiple members
+ */
+export async function createGroupChat(
+  creatorProfile: UserProfile,
+  groupName: string,
+  participantUids: string[],
+  groupBio?: string
+): Promise<string> {
+  const allParticipants = Array.from(
+    new Set([creatorProfile.uid, ...participantUids])
+  );
+  const participantNames: Record<string, string> = {
+    [creatorProfile.uid]: creatorProfile.displayName || creatorProfile.userCode,
+  };
+
+  // Fetch participant profiles for display names
+  for (const uid of participantUids) {
+    if (uid !== creatorProfile.uid) {
+      try {
+        const uDoc = await getDoc(doc(db, "users", uid));
+        if (uDoc.exists()) {
+          const uData = uDoc.data() as UserProfile;
+          participantNames[uid] = uData.displayName || uData.userCode || "عضو";
+        }
+      } catch (e) {}
+    }
+  }
+
+  const unreadCount: Record<string, number> = {};
+  allParticipants.forEach((uid) => {
+    unreadCount[uid] = 0;
+  });
+
+  const encryptedWelcome = encryptMessageText(
+    `🎉 تم إنشاء المجموعة "${groupName.trim()}" بواسطة ${
+      creatorProfile.displayName || creatorProfile.userCode
+    }`
+  );
+
+  const groupData: Partial<Chat> = {
+    type: "group",
+    groupName: groupName.trim(),
+    groupDescription: groupBio?.trim() || "",
+    groupAdmin: creatorProfile.uid,
+    participants: allParticipants,
+    participantNames,
+    unreadCount,
+    lastMessage: {
+      text: encryptedWelcome,
+      senderId: "system",
+      type: "system",
+      createdAt: serverTimestamp(),
+    },
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const groupRef = await addDoc(collection(db, "chats"), groupData);
+
+  // Add initial system message to group
+  await addDoc(collection(db, "chats", groupRef.id, "messages"), {
+    senderId: "system",
+    senderName: "النظام",
+    text: encryptedWelcome,
+    type: "system",
+    reactions: {},
+    isDeleted: false,
+    deletedFor: [],
+    createdAt: serverTimestamp(),
+  });
+
+  return groupRef.id;
+}
+
+/**
  * Fetch a single chat document by ID
  */
 export async function getChatDoc(chatId: string): Promise<Chat | null> {
   try {
     const snap = await getDoc(doc(db, "chats", chatId));
     if (snap.exists()) {
-      return { id: snap.id, ...snap.data() } as Chat;
+      const c = { id: snap.id, ...snap.data() } as Chat;
+      if (c.lastMessage?.text) {
+        c.lastMessage.text = decryptMessageText(c.lastMessage.text);
+      }
+      return c;
     }
     return null;
   } catch (err) {

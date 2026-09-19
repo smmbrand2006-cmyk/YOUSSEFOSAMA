@@ -40,6 +40,9 @@ import {
   Trash2,
   Copy,
   Ban,
+  ChevronUp,
+  ChevronDown,
+  Smile,
 } from "lucide-react";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import styles from "@/styles/chat.module.css";
@@ -81,11 +84,46 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
   const [uploading, setUploading] = useState(false);
   const [standaloneChat, setStandaloneChat] = useState<Chat | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showInChatSearch, setShowInChatSearch] = useState(false);
+  const [inChatSearchQuery, setInChatSearchQuery] = useState("");
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // In-chat search matching
+  const matchingMessages = messages.filter(
+    (m) =>
+      !m.isDeleted &&
+      m.text &&
+      inChatSearchQuery.trim() &&
+      m.text.toLowerCase().includes(inChatSearchQuery.trim().toLowerCase())
+  );
+
+  const handleNextMatch = () => {
+    if (matchingMessages.length === 0) return;
+    const nextIdx = (activeMatchIndex + 1) % matchingMessages.length;
+    setActiveMatchIndex(nextIdx);
+    const targetId = matchingMessages[nextIdx].id;
+    document.getElementById(`msg-${targetId}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  };
+
+  const handlePrevMatch = () => {
+    if (matchingMessages.length === 0) return;
+    const prevIdx =
+      (activeMatchIndex - 1 + matchingMessages.length) % matchingMessages.length;
+    setActiveMatchIndex(prevIdx);
+    const targetId = matchingMessages[prevIdx].id;
+    document.getElementById(`msg-${targetId}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  };
 
   // Find current chat
   const currentChat = chats.find((c) => c.id === chatId) || standaloneChat;
@@ -493,11 +531,19 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           <button
             type="button"
             aria-label="Search"
-            className={styles.chatTopActionBtn}
+            className={`${styles.chatTopActionBtn} ${
+              showInChatSearch ? styles.activeChatTopActionBtn : ""
+            }`}
+            onClick={() => {
+              setShowInChatSearch((prev) => !prev);
+              if (showInChatSearch) {
+                setInChatSearchQuery("");
+              }
+            }}
             title="بحث في المحادثة"
           >
             <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
-              search
+              {showInChatSearch ? "close" : "search"}
             </span>
           </button>
 
@@ -514,6 +560,67 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           </button>
         </div>
       </div>
+
+      {/* In-Chat Search Bar */}
+      {showInChatSearch && (
+        <div className={styles.inChatSearchBar}>
+          <input
+            type="text"
+            className={styles.inChatSearchInput}
+            placeholder="بحث في رسائل المحادثة..."
+            value={inChatSearchQuery}
+            onChange={(e) => {
+              setInChatSearchQuery(e.target.value);
+              setActiveMatchIndex(0);
+            }}
+            autoFocus
+          />
+          <div className={styles.inChatSearchInfo}>
+            {inChatSearchQuery.trim() ? (
+              matchingMessages.length > 0 ? (
+                <span>
+                  {activeMatchIndex + 1} من {matchingMessages.length}
+                </span>
+              ) : (
+                <span style={{ color: "var(--error)" }}>لا توجد نتائج</span>
+              )
+            ) : (
+              <span>اكتب للبحث...</span>
+            )}
+          </div>
+          {matchingMessages.length > 0 && (
+            <div style={{ display: "flex", gap: "2px" }}>
+              <button
+                type="button"
+                className={styles.inChatSearchBtn}
+                onClick={handlePrevMatch}
+                title="السابق"
+              >
+                <ChevronUp size={18} />
+              </button>
+              <button
+                type="button"
+                className={styles.inChatSearchBtn}
+                onClick={handleNextMatch}
+                title="التالي"
+              >
+                <ChevronDown size={18} />
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            className={styles.inChatSearchBtn}
+            onClick={() => {
+              setShowInChatSearch(false);
+              setInChatSearchQuery("");
+            }}
+            title="إغلاق البحث"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
 
       {/* Main Chat Conversation Canvas */}
       <div className={styles.chatCanvas}>
@@ -543,48 +650,90 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           <rect fill="url(#wa-pattern)" height="100%" width="100%" />
         </svg>
 
-        {/* Context Menu */}
+        {/* Context Menu with Backdrop */}
         {contextMenu && (
-          <div
-            className={styles.contextMenu}
-            style={{
-              top: Math.min(contextMenu.y, window.innerHeight - 250),
-              left: Math.min(contextMenu.x, window.innerWidth - 200),
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className={styles.reactionsBar}>
-              {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  style={{
-                    fontSize: "1.2rem",
-                    cursor: "pointer",
-                    background: "none",
-                    border: "none",
-                  }}
-                  onClick={() => handleReaction(contextMenu.message, emoji)}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-            {contextMenu.message.senderId === userProfile?.uid && (
+          <>
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 98,
+                background: "rgba(0, 0, 0, 0.25)",
+              }}
+              onClick={() => setContextMenu(null)}
+            />
+            <div
+              className={styles.contextMenu}
+              style={{
+                top: Math.max(
+                  12,
+                  Math.min(
+                    contextMenu.y,
+                    (typeof window !== "undefined" ? window.innerHeight : 600) - 250
+                  )
+                ),
+                left: Math.max(
+                  12,
+                  Math.min(
+                    contextMenu.x,
+                    (typeof window !== "undefined" ? window.innerWidth : 800) - 220
+                  )
+                ),
+                zIndex: 99,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={styles.reactionsBar}>
+                {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    style={{
+                      fontSize: "1.2rem",
+                      cursor: "pointer",
+                      background: "none",
+                      border: "none",
+                      padding: "2px 4px",
+                      borderRadius: "6px",
+                    }}
+                    onClick={() => handleReaction(contextMenu.message, emoji)}
+                    title={`تفاعل بـ ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
               <div
                 className={styles.contextMenuItem}
-                onClick={() => handleDelete(contextMenu.message, true)}
+                onClick={() => handleReply(contextMenu.message)}
               >
-                <Trash2 size={16} /> الحذف لدى الجميع
+                <Reply size={16} /> الرد على الرسالة
               </div>
-            )}
-            <div
-              className={`${styles.contextMenuItem} ${styles.contextMenuDanger}`}
-              onClick={() => handleDelete(contextMenu.message, false)}
-            >
-              <Trash2 size={16} /> الحذف لدي فقط
+              <div
+                className={styles.contextMenuItem}
+                onClick={() => handleCopy(contextMenu.message)}
+              >
+                <Copy size={16} /> نسخ النص
+              </div>
+              {contextMenu.message.senderId === userProfile?.uid &&
+                !contextMenu.message.isDeleted && (
+                  <div
+                    className={styles.contextMenuItem}
+                    onClick={() => handleDelete(contextMenu.message, true)}
+                  >
+                    <Trash2 size={16} /> الحذف لدى الجميع
+                  </div>
+                )}
+              {!contextMenu.message.isDeleted && (
+                <div
+                  className={`${styles.contextMenuItem} ${styles.contextMenuDanger}`}
+                  onClick={() => handleDelete(contextMenu.message, false)}
+                >
+                  <Trash2 size={16} /> الحذف لدي فقط
+                </div>
+              )}
             </div>
-          </div>
+          </>
         )}
 
         {/* Messages */}
@@ -621,6 +770,7 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
           return (
             <div
               key={msg.id}
+              id={`msg-${msg.id}`}
               className={isOutgoing ? styles.msgRowOutgoing : styles.msgRowIncoming}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -633,7 +783,28 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                     ? styles.msgBubbleOutgoing
                     : styles.msgBubbleIncoming
                 }
+                style={{ position: "relative" }}
               >
+                {/* Mobile / Touch / Hover Action Trigger */}
+                <button
+                  type="button"
+                  className={styles.msgActionTrigger}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setContextMenu({
+                      x: isOutgoing ? rect.left - 180 : rect.right + 10,
+                      y: rect.top,
+                      message: msg,
+                    });
+                  }}
+                  title="تفاعلات وخيارات الرسالة"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>
+                    expand_more
+                  </span>
+                </button>
+
                 {/* Reply preview */}
                 {msg.replyTo && (
                   <div
@@ -691,9 +862,54 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       </div>
                     )}
                     {msg.text && (msg.type !== "image" || !msg.mediaCode) && (
-                      <span>{msg.text}</span>
+                      <span>
+                        {inChatSearchQuery.trim() &&
+                        msg.text
+                          .toLowerCase()
+                          .includes(inChatSearchQuery.trim().toLowerCase()) ? (
+                          <span
+                            style={{
+                              background: "rgba(255, 235, 59, 0.35)",
+                              color: "#fff",
+                              padding: "0 2px",
+                              borderRadius: "2px",
+                            }}
+                          >
+                            {msg.text}
+                          </span>
+                        ) : (
+                          msg.text
+                        )}
+                      </span>
                     )}
                   </>
+                )}
+
+                {/* Reactions badge row */}
+                {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                  <div className={styles.msgReactionsBadgeRow}>
+                    {Object.entries(
+                      Object.values(msg.reactions).reduce(
+                        (acc: Record<string, number>, emoji: string) => {
+                          acc[emoji] = (acc[emoji] || 0) + 1;
+                          return acc;
+                        },
+                        {}
+                      )
+                    ).map(([emoji, count]) => (
+                      <span
+                        key={emoji}
+                        className={styles.msgReactionPill}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReaction(msg, emoji);
+                        }}
+                        title="تفاعل"
+                      >
+                        {emoji} {count > 1 ? count : ""}
+                      </span>
+                    ))}
+                  </div>
                 )}
 
                 {/* Time & checkmark */}
