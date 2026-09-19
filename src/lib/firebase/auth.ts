@@ -23,27 +23,30 @@ const googleProvider = new GoogleAuthProvider();
 
 /**
  * Register a new user with a custom code/number.
- * Uses Firebase Anonymous Auth + stores user code in Firestore.
+ * Signs in anonymously FIRST so Firestore requests have request.auth != null.
  */
 export async function registerWithCode(
   userCode: string,
   displayName: string
 ): Promise<User> {
-  // Check if user code is already taken
+  // 1. Sign in anonymously FIRST so request.auth != null in Firestore
+  let user = auth.currentUser;
+  if (!user) {
+    const cred = await signInAnonymously(auth);
+    user = cred.user;
+  }
+
+  // 2. Check if user code is already taken by another account
   const codeQuery = query(
     collection(db, "users"),
     where("userCode", "==", userCode)
   );
   const existing = await getDocs(codeQuery);
-  if (!existing.empty) {
-    throw new Error("This code is already taken. Please choose another one.");
+  if (!existing.empty && existing.docs[0].id !== user.uid) {
+    throw new Error("هذا الكود مستخدم بالفعل، يرجى اختيار كود أو رقم آخر.");
   }
 
-  // Create anonymous auth user
-  const cred = await signInAnonymously(auth);
-  const user = cred.user;
-
-  // Create user profile document
+  // 3. Create user profile document
   const userProfile = {
     uid: user.uid,
     userCode,
@@ -77,6 +80,14 @@ export async function registerWithCode(
  * Login with existing user code.
  */
 export async function loginWithCode(userCode: string): Promise<UserProfile> {
+  // 1. Ensure authenticated session exists
+  let user = auth.currentUser;
+  if (!user) {
+    const cred = await signInAnonymously(auth);
+    user = cred.user;
+  }
+
+  // 2. Query user by code
   const codeQuery = query(
     collection(db, "users"),
     where("userCode", "==", userCode)
@@ -84,14 +95,11 @@ export async function loginWithCode(userCode: string): Promise<UserProfile> {
   const snapshot = await getDocs(codeQuery);
 
   if (snapshot.empty) {
-    throw new Error("No account found with this code.");
+    throw new Error("لم يتم العثور على حساب بهذا الكود.");
   }
 
   const userDoc = snapshot.docs[0];
   const userData = userDoc.data() as UserProfile;
-
-  // Sign in anonymously
-  await signInAnonymously(auth);
 
   // Store the mapping in localStorage for session persistence
   if (typeof window !== "undefined") {
