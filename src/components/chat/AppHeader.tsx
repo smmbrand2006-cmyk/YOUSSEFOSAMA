@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { getDeferredPrompt, promptPWAInstall, isAppInstalledPWA } from "@/lib/utils/pwaNotifications";
+import Image from "next/image";
 import styles from "@/styles/chat.module.css";
 
 interface AppHeaderProps {
@@ -41,12 +42,25 @@ export default function AppHeader({
 
   return (
     <header className={styles.appHeader}>
-      {/* Brand Title */}
-      <div className={styles.appHeaderLeft}>
-        <div className={styles.appHeaderTitle}>
-          <span>YOUSSEF APP</span>
-          <span className={styles.appHeaderDot} />
-        </div>
+      {/* Brand Title with Official Logo */}
+      <div
+        className={styles.appHeaderLeft}
+        onClick={() => router.push("/chat")}
+        style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "10px" }}
+      >
+        <Image
+          src="/logo.png"
+          alt="YOUSSEF APP"
+          width={110}
+          height={32}
+          priority
+          style={{
+            objectFit: "contain",
+            height: "28px",
+            width: "auto",
+            filter: "drop-shadow(0 2px 8px rgba(255, 255, 255, 0.15))",
+          }}
+        />
         {userProfile?.userCode && (
           <span className={styles.appHeaderUserBadge}>
             #{userProfile.userCode}

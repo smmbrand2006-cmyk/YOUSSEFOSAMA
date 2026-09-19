@@ -140,7 +140,7 @@ let deferredPrompt: any = null;
 
 if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();
+    // Save event for custom UI button trigger, while allowing native browser banner
     deferredPrompt = e;
     window.dispatchEvent(new Event("pwa-can-install"));
   });

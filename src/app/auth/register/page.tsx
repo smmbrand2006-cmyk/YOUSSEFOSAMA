@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { registerWithCode } from "@/lib/firebase/auth";
-import { User as LucideUser, Hash, Lock, MessageCircle, AlertTriangle, ShieldCheck } from "lucide-react";
+import { User as LucideUser, Hash, Lock, AlertTriangle, ShieldCheck } from "lucide-react";
+import Image from "next/image";
 import styles from "@/styles/auth.module.css";
 
 export default function RegisterPage() {
@@ -55,11 +56,20 @@ export default function RegisterPage() {
     <div className={styles.authContainer}>
       <div className={styles.authLeft}>
         <div className={styles.authCard}>
-          <div className={styles.authLogo}>
-            <div className={styles.authLogoIcon}>
-              <MessageCircle size={28} />
-            </div>
-            <h1>Youssef App</h1>
+          <div className={styles.authLogo} style={{ justifyContent: "center", marginBottom: "16px" }}>
+            <Image
+              src="/logo.png"
+              alt="YOUSSEF APP"
+              width={190}
+              height={60}
+              priority
+              style={{
+                objectFit: "contain",
+                height: "50px",
+                width: "auto",
+                filter: "drop-shadow(0 3px 12px rgba(255, 255, 255, 0.15))",
+              }}
+            />
           </div>
 
           <h2 className={styles.authTitle}>إنشاء حساب جديد</h2>
