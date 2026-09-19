@@ -128,6 +128,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       }, 1000);
     } catch (err) {
       console.error("Failed to initiate call:", err);
+      throw err;
     }
   };
 

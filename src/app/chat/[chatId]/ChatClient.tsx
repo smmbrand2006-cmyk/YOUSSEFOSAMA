@@ -21,6 +21,8 @@ import {
 import { encodeImageToBase64 } from "@/lib/utils/imageEncoder";
 import { Message } from "@/lib/types/message";
 import { Chat } from "@/lib/types/chat";
+import { UserProfile } from "@/lib/types/user";
+import { getUserProfile } from "@/lib/firebase/auth";
 import { formatMessageTime, formatLastSeen } from "@/lib/utils/formatDate";
 import {
   ArrowLeft,
@@ -130,13 +132,23 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
     currentChat?.isSupport ||
     otherUid === "support_123_uid" ||
     otherUid === "support_official_123";
+
+  const [otherUserData, setOtherUserData] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (!otherUid || isSupport) return;
+    getUserProfile(otherUid).then((prof) => {
+      if (prof) setOtherUserData(prof);
+    });
+  }, [otherUid, isSupport]);
+
   const otherName = isSupport
     ? "الدعم الفني (123)"
-    : otherUid
-    ? currentChat?.participantNames?.[otherUid] || "مستخدم"
-    : currentChat?.type === "group"
-    ? (currentChat as any)?.name || "مجموعة"
-    : "مستخدم";
+    : otherUserData?.displayName ||
+      (otherUid ? currentChat?.participantNames?.[otherUid] : null) ||
+      otherUserData?.userCode ||
+      (currentChat?.type === "group" ? (currentChat as any)?.name : null) ||
+      (otherUid ? `مستخدم #${otherUid.substring(0, 4)}` : "مستخدم");
 
   // Listen to typing
   useEffect(() => {
@@ -287,9 +299,25 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
   };
 
   // Calls
-  const handleStartCall = (type: "audio" | "video") => {
-    if (!otherUid) return;
-    initiateCall(otherUid, otherName, "", type);
+  const handleStartCall = async (type: "audio" | "video") => {
+    if (isSupport) {
+      alert("خدمة الدعم الفني مخصصة للمراسلة النصية الفورية حالياً 🎧");
+      return;
+    }
+    if (!otherUid) {
+      alert("جاري تحميل بيانات الطرف الآخر، يرجى المحاولة بعد لحظات.");
+      return;
+    }
+    try {
+      await initiateCall(otherUid, otherName, "", type);
+    } catch (err: any) {
+      console.error("Call error:", err);
+      alert(
+        "تعذر بدء المكالمة: " +
+          (err.message ||
+            "يرجى التأكد من السماح بالوصول للميكروفون والكاميرا في المتصفح.")
+      );
+    }
   };
 
   // Context menu actions

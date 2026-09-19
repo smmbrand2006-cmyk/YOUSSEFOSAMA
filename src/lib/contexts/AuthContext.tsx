@@ -2,7 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User } from "firebase/auth";
-import { onAuthChange, getUserProfile } from "@/lib/firebase/auth";
+import { onAuthChange } from "@/lib/firebase/auth";
+import { auth } from "@/lib/firebase/config";
 import { listenToUserProfile } from "@/lib/firebase/firestore";
 import { setUserOnline, setUserOffline } from "@/lib/firebase/realtime";
 import { UserProfile } from "@/lib/types/user";
@@ -27,46 +28,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubProfile: (() => void) | null = null;
+
+    // Ensure Firebase Auth is completely ready before clearing loading state
+    auth.authStateReady().then(() => {
+      if (!auth.currentUser) {
+        setLoading(false);
+      }
+    });
+
     const unsubAuth = onAuthChange(async (user) => {
       setFirebaseUser(user);
 
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (user) {
-        // Source of truth is ALWAYS Firebase Auth user.uid
         const targetUid = user.uid;
         if (typeof window !== "undefined") {
           localStorage.setItem("youssef_app_uid", user.uid);
         }
 
-        // Listen to user profile in real-time
-        const unsubProfile = listenToUserProfile(targetUid, (profile) => {
+        const savedCode =
+          typeof window !== "undefined"
+            ? localStorage.getItem("youssef_app_code") || ""
+            : "";
+        const derivedCode =
+          savedCode || user.email?.split("@")[0] || user.uid.substring(0, 6);
+
+        // Immediately set a valid userProfile so it is NEVER null while authenticated
+        setUserProfile((prev) => {
+          if (prev && prev.uid === user.uid) return prev;
+          return {
+            uid: user.uid,
+            userCode: derivedCode,
+            displayName: user.displayName || derivedCode,
+            bio: "",
+            createdAt: new Date() as any,
+            lastSeen: new Date() as any,
+            isOnline: true,
+            contacts: [],
+            blockedUsers: [],
+            settings: {
+              lastSeenPrivacy: "everyone",
+              statusPrivacy: "everyone",
+              readReceipts: true,
+              notificationSound: true,
+            },
+          };
+        });
+
+        // Listen to live profile in Firestore
+        unsubProfile = listenToUserProfile(targetUid, (profile) => {
           if (profile) {
             setUserProfile(profile);
-          } else {
-            // Safe fallback profile to prevent redirect bounce
-            const savedCode =
-              typeof window !== "undefined"
-                ? localStorage.getItem("youssef_app_code")
-                : "";
-            const derivedCode =
-              savedCode || user.email?.split("@")[0] || user.uid.substring(0, 6);
-
-            setUserProfile({
-              uid: user.uid,
-              userCode: derivedCode,
-              displayName: user.displayName || derivedCode,
-              bio: "",
-              createdAt: new Date() as any,
-              lastSeen: new Date() as any,
-              isOnline: true,
-              contacts: [],
-              blockedUsers: [],
-              settings: {
-                lastSeenPrivacy: "everyone",
-                statusPrivacy: "everyone",
-                readReceipts: true,
-                notificationSound: true,
-              },
-            });
           }
           setLoading(false);
         });
@@ -87,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.addEventListener("beforeunload", handleBeforeUnload);
 
         return () => {
-          unsubProfile();
+          if (unsubProfile) unsubProfile();
           window.removeEventListener("beforeunload", handleBeforeUnload);
         };
       } else {
@@ -96,10 +113,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    return () => unsubAuth();
+    return () => {
+      if (unsubProfile) unsubProfile();
+      unsubAuth();
+    };
   }, []);
 
-  const isAuthenticated = !!firebaseUser && !!userProfile;
+  const isAuthenticated = !!firebaseUser;
 
   return (
     <AuthContext.Provider
