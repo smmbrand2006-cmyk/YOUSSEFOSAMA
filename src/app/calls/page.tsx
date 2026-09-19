@@ -9,6 +9,7 @@ import AppNavRail from "@/components/chat/AppNavRail";
 import MobileBottomNav from "@/components/chat/MobileBottomNav";
 import SelectContactModal from "@/components/chat/SelectContactModal";
 import CreateGroupModal from "@/components/chat/CreateGroupModal";
+import { useBackHandler } from "@/lib/contexts/BackHandlerContext";
 import {
   Phone,
   Video,
@@ -52,6 +53,14 @@ export default function CallsPage() {
   const [showSelectContact, setShowSelectContact] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+
+  // Back Navigation Handlers for Calls Page
+  useBackHandler(showKeypad, () => setShowKeypad(false), "calls_keypad", 25);
+  useBackHandler(showSelectContact, () => setShowSelectContact(false), "calls_select_contact", 25);
+  useBackHandler(showCreateGroup, () => setShowCreateGroup(false), "calls_create_group", 25);
+  useBackHandler(showSearch, () => setShowSearch(false), "calls_search", 15);
+  useBackHandler(showMenu, () => setShowMenu(false), "calls_menu", 15);
+  useBackHandler(true, () => router.push("/chat"), "calls_page_to_chat", 5);
 
   // Load from localStorage (strictly real calls, purge all mock fake data)
   useEffect(() => {

@@ -92,3 +92,15 @@ npm run auto-save
 ```bash
 node scripts/github-bot.js --watch
 ```
+
+### ج. سكربت تنظيف الشاتات التجريبية القديمة (`scripts/clean-test-chats.js`):
+يقوم بحذف كافة الشاتات والرسائل التجريبية القديمة من Cloud Firestore لبدء قاعدة البيانات نظيفة 100%:
+```bash
+node scripts/clean-test-chats.js
+```
+
+### د. سكربت توليد أيقونات وتجهيز اللوجو (`scripts/setup-logo.js`):
+يقوم بتوزيع اللوجو الرسمي المعدني 3D وتوليد الأيقونات بكافة الأحجام المطلوبة للمتصفح والـ PWA و Favicon:
+```bash
+node scripts/setup-logo.js
+```

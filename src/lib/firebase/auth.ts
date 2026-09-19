@@ -21,6 +21,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "./config";
 import { UserProfile } from "@/lib/types/user";
+import { disableNotifications } from "@/lib/notifications";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -249,6 +250,14 @@ export async function signInWithGoogle(): Promise<User> {
  * Sign out
  */
 export async function signOut(): Promise<void> {
+  const currentUid = auth.currentUser?.uid;
+  if (currentUid) {
+    try {
+      await disableNotifications(currentUid);
+    } catch (e) {
+      console.warn("Failed to disable FCM token on signout:", e);
+    }
+  }
   if (typeof window !== "undefined") {
     localStorage.removeItem("youssef_app_uid");
     localStorage.removeItem("youssef_app_code");

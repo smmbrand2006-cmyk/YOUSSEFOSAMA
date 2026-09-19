@@ -16,6 +16,7 @@ import {
 import { encodeImageToBase64 } from "@/lib/utils/imageEncoder";
 import AppNavRail from "@/components/chat/AppNavRail";
 import MobileBottomNav from "@/components/chat/MobileBottomNav";
+import { useBackHandler } from "@/lib/contexts/BackHandlerContext";
 import {
   ArrowLeft,
   Camera,
@@ -94,6 +95,22 @@ export default function StatusPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Back Navigation Handlers for Status Page
+  useBackHandler(showViewersSheet, () => setShowViewersSheet(false), "status_viewers_sheet", 30);
+  useBackHandler(
+    activeStoryIndex !== null,
+    () => {
+      setActiveStoryIndex(null);
+      if (storyTimerRef.current) clearInterval(storyTimerRef.current);
+    },
+    "status_active_story",
+    25
+  );
+  useBackHandler(isCreatingText, () => setIsCreatingText(false), "status_create_text", 20);
+  useBackHandler(showSearch, () => setShowSearch(false), "status_search", 15);
+  useBackHandler(showMenu, () => setShowMenu(false), "status_menu", 15);
+  useBackHandler(true, () => router.push("/chat"), "status_page_to_chat", 5);
 
   // Real-time Firestore synchronization for active statuses (24h validity)
   useEffect(() => {

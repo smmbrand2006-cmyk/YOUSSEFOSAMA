@@ -19,6 +19,7 @@ import { formatMessageTime } from "@/lib/utils/formatDate";
 import UserProfileModal from "./UserProfileModal";
 import CreateGroupModal from "./CreateGroupModal";
 import SelectContactModal from "./SelectContactModal";
+import { useBackHandler } from "@/lib/contexts/BackHandlerContext";
 import styles from "@/styles/chat.module.css";
 
 type FilterType = "all" | "unread" | "groups" | "favorites";
@@ -42,6 +43,22 @@ export default function ChatSidebar() {
   const [showMyProfileModal, setShowMyProfileModal] = useState(false);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
   const mobileSearchInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Back Navigation Handlers for Sidebar Modals & Menus
+  useBackHandler(showSelectContact, () => setShowSelectContact(false), "sidebar_select_contact", 25);
+  useBackHandler(showCreateGroupModal, () => setShowCreateGroupModal(false), "sidebar_create_group", 25);
+  useBackHandler(
+    showProfileModal,
+    () => {
+      setShowProfileModal(false);
+      setSelectedProfileUser(null);
+    },
+    "sidebar_profile_modal",
+    25
+  );
+  useBackHandler(showMyProfileModal, () => setShowMyProfileModal(false), "sidebar_my_profile_modal", 25);
+  useBackHandler(showFabMenu, () => setShowFabMenu(false), "sidebar_fab_menu", 18);
+  useBackHandler(showMenu, () => setShowMenu(false), "sidebar_menu", 18);
 
   // Extract contact list from existing chats for the group picker
   const existingContacts = React.useMemo(() => {

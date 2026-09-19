@@ -78,6 +78,25 @@
 
 ---
 
+### هـ. مجموعة الحالات والقصص (`statuses`)
+المسار: `/statuses/{statusId}`
+
+| الحقل | النوع (Type) | الوصف |
+| :--- | :--- | :--- |
+| `id` | `string` | معرف وثيقة الحالة الفريد. |
+| `userId` | `string` | معرف المستخدم ناشر الحالة (`uid`). |
+| `userName` | `string` | اسم ناشر الحالة. |
+| `userAvatar` | `string (اختياري)` | صورة الناشر الرمزية. |
+| `type` | `"text" \| "image"` | نوع الحالة (نص بتدرج لوني أو صورة). |
+| `content` | `string (اختياري)` | النص المكتوب في الحالة النصية. |
+| `backgroundColor` | `string (اختياري)` | كود التدرج اللوني لخلفية الحالة النصية. |
+| `mediaUrl` | `string (اختياري)` | كود الصورة المشفر Base64 للحالة المصورة. |
+| `viewers` | `Array<StatusViewer>` | مصفوفة تحتوي على تفاصيل من شاهد الحالة (`userId`, `userName`, `userAvatar`, `viewedAt`). |
+| `createdAt` | `Timestamp` | وقت نشر الحالة. |
+| `expiresAt` | `Timestamp` | وقت انتهاء صلاحية الحالة (بعد 24 ساعة بالضبط). |
+
+---
+
 ## 2. هيكل Firebase Realtime Database
 
 تستخدم للعمليات اللحظية فائقة السرعة بدون استهلاك لعمليات قراءة Firestore:

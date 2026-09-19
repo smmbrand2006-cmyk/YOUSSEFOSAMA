@@ -10,6 +10,9 @@ import ChatSidebar from "@/components/chat/ChatSidebar";
 import MobileBottomNav from "@/components/chat/MobileBottomNav";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import StatusModal from "@/components/chat/StatusModal";
+import NotificationPrompt from "@/components/NotificationPrompt";
+import { listenForeground, listenNotificationClicks } from "@/lib/notifications";
+import { useBackHandler } from "@/lib/contexts/BackHandlerContext";
 import styles from "@/styles/chat.module.css";
 
 export default function ChatLayout({
@@ -18,11 +21,31 @@ export default function ChatLayout({
   children: React.ReactNode;
 }) {
   const { isAuthenticated, loading, userProfile } = useAuth();
-  const { activeChat } = useChats();
+  const { chats, activeChat, setActiveChat } = useChats();
   const router = useRouter();
   const [showMyProfile, setShowMyProfile] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [mobileTab, setMobileTab] = useState("chats");
+
+  useBackHandler(showMyProfile, () => setShowMyProfile(false), "layout_my_profile", 25);
+  useBackHandler(showStatusModal, () => setShowStatusModal(false), "layout_status_modal", 25);
+
+  // Wire FCM Foreground notifications and notification click actions
+  useEffect(() => {
+    const off1 = listenForeground(() => activeChat?.id || null);
+    const off2 = listenNotificationClicks((chatId) => {
+      const target = chats.find((c) => c.id === chatId);
+      if (target) {
+        setActiveChat(target);
+      } else {
+        router.push(`/chat/${chatId}`);
+      }
+    });
+    return () => {
+      off1();
+      off2();
+    };
+  }, [activeChat?.id, chats, setActiveChat, router]);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -69,6 +92,9 @@ export default function ChatLayout({
           onSearchClick={handleSearchTrigger}
           onOpenProfile={() => setShowMyProfile(true)}
         />
+
+        {/* FCM Push Notification Prompt (when not granted/denied) */}
+        {userProfile && <NotificationPrompt uid={userProfile.uid} />}
 
         {/* 3. Main Workstation Body: Left Sidebar (46%) + Main Conversation Panel */}
         <div className={styles.appContentArea}>

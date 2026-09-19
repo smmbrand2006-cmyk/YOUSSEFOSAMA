@@ -29,6 +29,12 @@
 7. **[07_DEPLOYMENT_AND_SCRIPTS.md](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/report/07_DEPLOYMENT_AND_SCRIPTS.md)**
    - دليل التشغيل والتطوير المحلي، إنتاج البناء الثابت (`npm run build`)، النشر على Cloudflare Pages، وسكربتات المزامنة مع GitHub.
 
+8. **[08_ENCRYPTION_AND_NEW_FEATURES.md](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/report/08_ENCRYPTION_AND_NEW_FEATURES.md)**
+   - نظام التشفير اليومي الدوار للرسائل في Firestore، إدارة المجموعات، وقائمة الإجراءات السريعة (FAB).
+
+9. **[09_STORIES_PWA_PERMISSIONS_NOTIFICATIONS.md](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/report/09_STORIES_PWA_PERMISSIONS_NOTIFICATIONS.md)**
+   - التحديثات الشاملة: نظام الاستوري وتتبع المشاهدات، إرسال الصور والفويس، تثبيت تطبيق PWA، الأذونات الكاملة قبل التنزيل، حل مشكلة اللمس في جوجل، ومحرك الإشعارات والخصوصية.
+
 ---
 
 تم إعداد هذا التقرير ليكون مرجعاً تقنياً وهندسياً متكاملاً لأي مطور أو مستخدم يريد فهم كل سطر برمجي في المشروع! 🌟

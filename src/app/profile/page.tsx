@@ -18,6 +18,7 @@ import {
   Bell,
 } from "lucide-react";
 import { testSystemNotification } from "@/lib/utils/pwaNotifications";
+import { useBackHandler } from "@/lib/contexts/BackHandlerContext";
 import styles from "@/styles/auth.module.css";
 
 export default function ProfilePage() {
@@ -31,6 +32,10 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [openingSupport, setOpeningSupport] = useState(false);
+
+  // Back Navigation Handlers for Profile Page
+  useBackHandler(editing, () => setEditing(false), "profile_editing", 15);
+  useBackHandler(true, () => router.push("/chat"), "profile_page_to_chat", 5);
 
   if (!userProfile) return null;
 

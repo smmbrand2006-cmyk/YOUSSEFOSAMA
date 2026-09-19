@@ -6,6 +6,7 @@ import { listenToChats } from "@/lib/firebase/firestore";
 import { Chat } from "@/lib/types/chat";
 
 import { dispatchAppNotification, playNotificationChime } from "@/lib/utils/pwaNotifications";
+import { useBackHandler } from "./BackHandlerContext";
 
 interface ChatContextType {
   chats: Chat[];
@@ -31,6 +32,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     activeChatRef.current = activeChat;
   }, [activeChat]);
+
+  // Protect mobile navigation: When inside any chat, mobile back button/swipe closes chat to Home
+  useBackHandler(
+    !!activeChat,
+    () => {
+      setActiveChat(null);
+    },
+    "active_chat_view",
+    10
+  );
 
   useEffect(() => {
     if (!userProfile) {

@@ -6,6 +6,8 @@ import { CallProvider } from "@/lib/contexts/CallContext";
 import CallOverlay from "@/components/calls/CallOverlay";
 
 import PWAClientManager from "@/components/pwa/PWAClientManager";
+import { BackHandlerProvider } from "@/lib/contexts/BackHandlerContext";
+import ExitConfirmModal from "@/components/pwa/ExitConfirmModal";
 import type { Viewport } from "next";
 
 export const metadata: Metadata = {
@@ -41,13 +43,16 @@ export const viewport: Viewport = {
 function AppProviders({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
-      <ChatProvider>
-        <CallProvider>
-          {children}
-          <CallOverlay />
-          <PWAClientManager />
-        </CallProvider>
-      </ChatProvider>
+      <BackHandlerProvider>
+        <ChatProvider>
+          <CallProvider>
+            {children}
+            <CallOverlay />
+            <PWAClientManager />
+            <ExitConfirmModal />
+          </CallProvider>
+        </ChatProvider>
+      </BackHandlerProvider>
     </AuthProvider>
   );
 }

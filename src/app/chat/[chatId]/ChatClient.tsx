@@ -30,6 +30,7 @@ import { Chat } from "@/lib/types/chat";
 import { UserProfile } from "@/lib/types/user";
 import { getUserProfile } from "@/lib/firebase/auth";
 import { formatMessageTime, formatLastSeen } from "@/lib/utils/formatDate";
+import { useBackHandler } from "@/lib/contexts/BackHandlerContext";
 import {
   ArrowLeft,
   Phone,
@@ -234,6 +235,30 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
   const [inChatSearchQuery, setInChatSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+  // Back Navigation Handlers for sub-views inside ChatClient
+  useBackHandler(!!lightboxImage, () => setLightboxImage(null), "chat_lightbox", 30);
+  useBackHandler(showProfileModal, () => setShowProfileModal(false), "chat_profile_modal", 25);
+  useBackHandler(
+    showInChatSearch,
+    () => {
+      setShowInChatSearch(false);
+      setInChatSearchQuery("");
+    },
+    "chat_in_search",
+    20
+  );
+  useBackHandler(
+    isSelecting,
+    () => {
+      setIsSelecting(false);
+      setSelectedIds([]);
+    },
+    "chat_select_mode",
+    18
+  );
+  useBackHandler(showTopMenu, () => setShowTopMenu(false), "chat_top_menu", 15);
+  useBackHandler(showAttach, () => setShowAttach(false), "chat_attach_menu", 15);
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -1754,7 +1779,14 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                       className={styles.attachMenu}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <label className={styles.attachItem} style={{ cursor: "pointer" }}>
+                      <div
+                        className={styles.attachItem}
+                        style={{ cursor: "pointer" }}
+                        onClick={() => {
+                          setShowAttach(false);
+                          fileInputRef.current?.click();
+                        }}
+                      >
                         <div
                           className={styles.attachItemIcon}
                           style={{ background: "var(--primary-container)" }}
@@ -1764,18 +1796,20 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
                         <span className={styles.attachItemLabel}>
                           {uploading ? "جاري التشفير..." : "صورة (مشفرة Base64)"}
                         </span>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          style={{ display: "none" }}
-                          onChange={handleImageUpload}
-                          disabled={uploading}
-                        />
-                      </label>
+                      </div>
                     </div>
                   )}
                 </div>
+
+                {/* Hidden File Input for Direct Gallery / Camera Capture */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={handleImageUpload}
+                  disabled={uploading}
+                />
 
                 {/* Direct Image Pick Button */}
                 <button
