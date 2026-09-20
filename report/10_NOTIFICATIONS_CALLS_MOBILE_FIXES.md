@@ -90,7 +90,7 @@
 "use client";
 import { getMessaging, getToken, deleteToken, onMessage, isSupported } from "firebase/messaging";
 import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { app, db } from "./firebase/config";
+import { app, db, auth } from "./firebase/config";
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || "";
 const SW_URL = "/firebase-messaging-sw.js";
@@ -122,8 +122,16 @@ export async function enableNotifications(uid: string): Promise<EnableResult> {
     });
     if (!token) return { ok: false, reason: "no-token" };
 
+    // Ensure Firebase auth session is settled before Firestore write
+    if (!auth.currentUser) {
+      try {
+        await auth.authStateReady();
+      } catch {}
+    }
+    const resolvedUid = auth.currentUser?.uid || uid;
+
     await setDoc(
-      doc(db, "users", uid, "fcmTokens", token),
+      doc(db, "users", resolvedUid, "fcmTokens", token),
       {
         installed: window.matchMedia("(display-mode: standalone)").matches,
         ua: navigator.userAgent,
