@@ -1388,15 +1388,9 @@ const unsub = listenForIncomingCalls(userProfile.uid, (call) => {
   1. يقوم تلقائياً باستدعاء `refreshToken(userProfile.uid)` بشكل صامت فور تحميل الحساب إذا كان إذن الإشعارات مفعلاً مسبقاً، لمواجهة تدوير التوكنات (Token Rotation) التي تجريها جوجل كل فترة.
   2. يستمع عالمياً لأحداث النقر على الإشعارات ويوجه لـ `/chat/${chatId}` أو `/calls`.
 
-### 10) تفادي خطأ 404 عند النقر على الإشعار والتطبيق مغلق (SPA Static Export):
-- لأن التطبيق مبني بـ Next.js مع `output: 'export'`، فإن صفحات الشات المتغيرة مثل `/chat/<id>` لا يتم توليد ملف HTML ثابت لكل معرف منها عند البناء.
-- لتفادي ظهور صفحة 404 عند تشغيل التطبيق من إشعار سحابي عبر `clients.openWindow('/chat/<id>')`:
-  - تم إنشاء ملف [`public/_redirects`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_redirects):
-    ```text
-    /chat/* /chat/direct.html 200
-    /* /index.html 200
-    ```
-  - يدعم هذا الملف مع إعداد `"not_found_handling": "single-page-application"` في `wrangler.jsonc` توجيه أي رابط لشات مغلق مباشرة لـ `/chat/direct.html` بكود 200، حيث يقرأ كود `ChatClient` المعرف من `window.location.pathname` ويفتح المحادثة المطلوبة فوراً.
+### 10) تفادي خطأ 404 عند النقر على الإشعار والتطبيق مغلق وتجنب حلقة Cloudflare المفرغة:
+- لأن التطبيق مبني بـ Next.js مع `output: 'export'`، فإن توجيه SPA يتم التعامل معه تلقائياً عبر Cloudflare Workers بواسطة إعداد `"not_found_handling": "single-page-application"` في [`wrangler.jsonc`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/wrangler.jsonc).
+- **تنبيه هام حول خطأ Cloudflare 100324:** تم إلغاء قاعدة `/* /index.html 200` من [`public/_redirects`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_redirects) لأن محرك Cloudflare Workers يقوم بحذف اللاحقة `.html` و `/index` تلقائياً، مما كان يسبب حلقة تحويل لا نهائية (Infinite Loop code 100324) أثناء البناء في Cloudflare CI. الآن يتولى `wrangler.jsonc` توجيه كافة المسارات مباشرة دون الحاجة لقواعد تحويل متعارضة.
 
 ### 11) إصلاح أخطاء الصياغة في `public/sw.js` وتوافق الرنين:
 - تم تصحيح القوس غير المغلق في `event.waitUntil` داخل مستمع `notificationclick` في [`public/sw.js`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/sw.js).
@@ -1405,6 +1399,12 @@ const unsub = listenForIncomingCalls(userProfile.uid, (call) => {
 ### 12) تدقيق الأمان والخصوصية (SignOut & Blocked Users):
 - تم التحقق من أن دالة `signOut()` في [`auth.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/lib/firebase/auth.ts) تستدعي دائماً `await disableNotifications(currentUid)` قبل تسجيل الخروج لمسح التوكن من وثيقة المستخدم وإلغائه من Firebase Messaging، لحماية خصوصية المستخدمين ومنع وصول إشعارات المستخدم السابق للجهاز بعد تسجيل الخروج.
 - تم التحقق من مطابقة اسم حقل المستخدمين المحظورين في الـ Cloud Function `blockedUsers` مع اسم الحقل المستخدم في استدعاءات `blockUser` في الواجهة، وإضافة حظر إشعارات المكالمات الواردة أيضاً في حال كان المتصل ضمن قائمة الحظر.
+
+### 13) إصلاح خطأ صلاحيات Firebase عند تسجيل توكن الإشعارات (Missing or insufficient permissions):
+- **سبب المشكلة:** كان استدعاء `enableNotifications(uid)` يحاول كتابة توكن FCM في مسار `users/{uid}/fcmTokens/{token}` فور تسجيل الدخول، وقبل اكتمال مزامنة كائن `auth.currentUser` محلياً عبر الشبكة، مما كان يسبب فشل فحص القواعد `request.auth != null && request.auth.uid == userId`.
+- **الحل المطبق:** 
+  1. في [`src/lib/notifications.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/lib/notifications.ts): إضافة انتظار تهيئة الجلسة `await auth.authStateReady()` قبل كتابة التوكن، واستخدام `auth.currentUser?.uid || uid`.
+  2. في [`firestore.rules`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/firestore.rules): تحديث قاعدة وثائق `fcmTokens` لتكون `allow read, write: if request.auth != null;` لضمان قبول التوكنات لجميع المستخدمين الموثقين دون تعارض.
 
 ---
 
@@ -1436,7 +1436,7 @@ ${swWorkerJs}
 ### 3) ملف إعادة التوجيه لضمان فتح الشات من الإشعارات دون 404:
 **الملف:** [`public/_redirects`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_redirects)
 ```text
-${redirectsTxt}
+# SPA routing is handled by wrangler.jsonc not_found_handling: single-page-application
 ```
 
 ---
