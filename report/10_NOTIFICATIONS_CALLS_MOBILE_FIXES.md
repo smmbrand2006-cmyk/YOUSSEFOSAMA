@@ -1407,6 +1407,15 @@ const unsub = listenForIncomingCalls(userProfile.uid, (call) => {
   1. في [`src/lib/notifications.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/lib/notifications.ts): إضافة انتظار تهيئة الجلسة `await auth.authStateReady()` قبل كتابة التوكن، واستخدام `auth.currentUser?.uid || uid`.
   2. في [`firestore.rules`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/firestore.rules): تحديث قاعدة وثائق `fcmTokens` لتكون `allow read, write: if request.auth != null;` لضمان قبول التوكنات لجميع المستخدمين الموثقين دون تعارض.
 
+### 14) استبدال تنبيهات المتصفح القديمة (window.alert & confirm) بنظام زجاجي فاخر متكامل:
+- **المشكلة السابقة:** كانت رسائل التنبيه والتحذير والتأكيد تظهر عبر رسائل المتصفح البيضاء الافتراضية القبيحة (`alert()` و `confirm()`) التي تعرض عبارة مثل `youssefosama... says` مع زر أبيض عادي يفسد المظهر المظلم المتناسق للتطبيق.
+- **الحل المطبق الشامل:**
+  1. **إنشاء مكوّن عام فاخر:** [`src/components/ui/GlobalAlertModal.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/ui/GlobalAlertModal.tsx) بتصميم زجاجي داكن (Glassmorphic) مع توهج نيون محيطي يتغير لونه حسب نوع التنبيه (نجاح: أخضر زمردي، خطأ/حذف: وردي محمر، تحذير: كهرماني، معلومات: أزرق نيلي).
+  2. **نغمات صوتية ترحيبية ناعمة:** دمج مُولّد نغمات صوتية (Web Audio API Synthesizer) يُصدر صوتاً عصرياً فاخراً بدون أي مكتبات خارجية عند ظهور أي تنبيه أو رسالة تأكيد.
+  3. **اعتراض شامل لـ `window.alert`:** تم اعتراض الدالة الأساسية `window.alert` في المستوى العام للمتصفح، بحيث يتم توجيه أي تنبيه يطلبه الكود في أي صفحة تلقائياً إلى هذا المودال الفاخر دون ظهور صندوق المتصفح الأبيض نهائياً.
+  4. **دوال مساعدة متقدمة:** في [`src/lib/utils/dialogs.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/lib/utils/dialogs.ts) تم بناء دوال `showAppAlert` و `showAppConfirm` و `showAppToast` لدعم إشعارات الـ Toast العائمة السريعة ونوافذ التأكيد التفاعلية.
+  5. **استبدال نوافذ التأكيد (`confirm`):** تم تحويل جميع عمليات الحذف والحظر في المحادثات والمكالمات والحالات والإشعارات لاستخدام نافذة التأكيد الفاخرة الجديدة بزرين ("تأكيد" و "إلغاء").
+
 ---
 
 ## 8. ☁️ كود الـ Cloud Functions المحدث لإرسال الإشعارات عند إغلاق التطبيق

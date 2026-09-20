@@ -26,6 +26,7 @@ import {
   Trash2,
 } from "lucide-react";
 import styles from "@/styles/chat.module.css";
+import { showAppConfirm } from "@/lib/utils/dialogs";
 
 interface CallLogItem {
   id: string;
@@ -108,8 +109,14 @@ export default function CallsPage() {
     }
   };
 
-  const handleClearLog = () => {
-    if (confirm("هل تريد مسح سجل المكالمات بالكامل؟")) {
+  const handleClearLog = async () => {
+    const ok = await showAppConfirm("هل تريد مسح سجل المكالمات بالكامل؟", {
+      title: "مسح سجل المكالمات",
+      type: "danger",
+      confirmText: "مسح السجل",
+      cancelText: "إلغاء",
+    });
+    if (ok) {
       saveCalls([]);
       setShowMenu(false);
     }

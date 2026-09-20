@@ -12,6 +12,7 @@ import {
   Clock,
 } from "lucide-react";
 import { formatLastSeen } from "@/lib/utils/formatDate";
+import { showAppConfirm } from "@/lib/utils/dialogs";
 import styles from "@/styles/chat.module.css";
 
 interface UserProfileModalProps {
@@ -54,8 +55,14 @@ export default function UserProfileModal({
   const handleBlockAction = async () => {
     if (isSupport) return;
     if (!isBlocked) {
-      const confirmed = window.confirm(
-        `هل أنت متأكد من حظر "${user.displayName || user.userCode}"؟ لن تتمكن من إرسال رسائل أو الاتصال به.`
+      const confirmed = await showAppConfirm(
+        `هل أنت متأكد من حظر "${user.displayName || user.userCode}"؟ لن تتمكن من إرسال رسائل أو الاتصال به.`,
+        {
+          title: "تأكيد الحظر",
+          type: "danger",
+          confirmText: "تأكيد الحظر",
+          cancelText: "إلغاء",
+        }
       );
       if (!confirmed) return;
     }

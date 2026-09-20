@@ -21,6 +21,7 @@ import { enableNotifications, disableNotifications, refreshToken } from "@/lib/n
 import { testSystemNotification, playNotificationChime } from "@/lib/utils/pwaNotifications";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
+import { showAppConfirm } from "@/lib/utils/dialogs";
 import styles from "@/styles/chat.module.css";
 
 interface NotificationSettingsModalProps {
@@ -144,7 +145,13 @@ export default function NotificationSettingsModal({
   };
 
   const handleDisableNotifications = async () => {
-    if (!confirm("هل أنت متأكد من تعطيل الإشعارات على هذا الجهاز؟ لن تتلقى رسائل أو مكالمات عند إغلاق التطبيق.")) return;
+    const ok = await showAppConfirm("هل أنت متأكد من تعطيل الإشعارات على هذا الجهاز؟ لن تتلقى رسائل أو مكالمات عند إغلاق التطبيق.", {
+      title: "تعطيل الإشعارات",
+      type: "danger",
+      confirmText: "نعم، تعطيل",
+      cancelText: "تراجع",
+    });
+    if (!ok) return;
     setLoading(true);
     try {
       await disableNotifications(uid);

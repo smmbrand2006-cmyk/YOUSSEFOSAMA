@@ -34,6 +34,7 @@ import {
   Clock,
 } from "lucide-react";
 import styles from "@/styles/chat.module.css";
+import { showAppConfirm } from "@/lib/utils/dialogs";
 
 const BG_COLORS = [
   "#005c4b", // WhatsApp Green
@@ -244,7 +245,13 @@ export default function StatusPage() {
   const handleDeleteCurrentStatus = async () => {
     if (activeStoryIndex === null || !activeStoryList[activeStoryIndex]) return;
     const currentStory = activeStoryList[activeStoryIndex];
-    if (confirm("هل تريد بالتأكيد حذف هذه الحالة نهائياً؟")) {
+    const ok = await showAppConfirm("هل تريد بالتأكيد حذف هذه الحالة نهائياً؟", {
+      title: "حذف الحالة",
+      type: "danger",
+      confirmText: "حذف الآن",
+      cancelText: "إلغاء",
+    });
+    if (ok) {
       try {
         await deleteStatus(currentStory.id);
         setActiveStoryIndex(null);

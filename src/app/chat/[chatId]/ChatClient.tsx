@@ -31,6 +31,7 @@ import { UserProfile } from "@/lib/types/user";
 import { getUserProfile } from "@/lib/firebase/auth";
 import { formatMessageTime, formatLastSeen } from "@/lib/utils/formatDate";
 import { useBackHandler } from "@/lib/contexts/BackHandlerContext";
+import { showAppConfirm } from "@/lib/utils/dialogs";
 import {
   ArrowLeft,
   Phone,
@@ -837,7 +838,13 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
     const confirmMsg = forEveryone
       ? `هل أنت متأكد من حذف ${count} رسالة لدى الجميع؟`
       : `هل أنت متأكد من حذف ${count} رسالة لديك فقط؟`;
-    if (!confirm(confirmMsg)) return;
+    const ok = await showAppConfirm(confirmMsg, {
+      title: "تأكيد حذف الرسائل",
+      type: "danger",
+      confirmText: "نعم، حذف",
+      cancelText: "إلغاء",
+    });
+    if (!ok) return;
 
     try {
       await deleteMultipleMessages(chatId, selectedIds, userProfile.uid, forEveryone);

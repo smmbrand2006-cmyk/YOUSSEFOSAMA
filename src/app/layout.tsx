@@ -8,6 +8,7 @@ import CallOverlay from "@/components/calls/CallOverlay";
 import PWAClientManager from "@/components/pwa/PWAClientManager";
 import { BackHandlerProvider } from "@/lib/contexts/BackHandlerContext";
 import ExitConfirmModal from "@/components/pwa/ExitConfirmModal";
+import GlobalAlertModal from "@/components/ui/GlobalAlertModal";
 import type { Viewport } from "next";
 
 export const metadata: Metadata = {
@@ -50,6 +51,7 @@ function AppProviders({ children }: { children: React.ReactNode }) {
             <CallOverlay />
             <PWAClientManager />
             <ExitConfirmModal />
+            <GlobalAlertModal />
           </CallProvider>
         </ChatProvider>
       </BackHandlerProvider>
