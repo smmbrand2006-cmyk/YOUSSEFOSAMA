@@ -10,21 +10,22 @@ import PWAInstallBanner from "./PWAInstallBanner";
 
 export default function PWAClientManager() {
   const router = useRouter();
-  const { userProfile } = useAuth();
+  const { firebaseUser, userProfile } = useAuth();
+  const currentUid = firebaseUser?.uid || userProfile?.uid;
 
   // Silently refresh FCM token on start/login if permissions already granted
   useEffect(() => {
     if (
-      userProfile?.uid &&
+      currentUid &&
       typeof window !== "undefined" &&
       typeof Notification !== "undefined" &&
       Notification.permission === "granted"
     ) {
-      refreshToken(userProfile.uid).catch((err) => {
+      refreshToken(currentUid).catch((err) => {
         console.warn("[PWAClientManager] silent token refresh failed:", err);
       });
     }
-  }, [userProfile?.uid]);
+  }, [currentUid]);
 
   useEffect(() => {
     registerServiceWorker();

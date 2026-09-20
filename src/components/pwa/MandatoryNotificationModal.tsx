@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { enableNotifications } from "@/lib/notifications";
+import { auth } from "@/lib/firebase/config";
 
 export default function MandatoryNotificationModal() {
   const { userProfile } = useAuth();
@@ -53,14 +54,17 @@ export default function MandatoryNotificationModal() {
   }
 
   const handleRequestAll = async () => {
-    if (!userProfile?.uid) {
-      alert("استنى ثواني لحد ما الحساب يتحمّل وحاول تاني");
-      return;
-    }
     setLoading(true);
     try {
-      // 1. Request Notifications first with dedicated gesture and register FCM token
-      const notifResult = await requestBrowserNotifications(userProfile.uid);
+      // 1. Request Notifications first with dedicated browser gesture
+      const targetUid =
+        userProfile?.uid ||
+        auth.currentUser?.uid ||
+        (typeof window !== "undefined" ? localStorage.getItem("youssef_app_uid") : null);
+
+      // Only pass UID to register in Firestore if user is actively authenticated
+      const activeUid = auth.currentUser ? (auth.currentUser.uid || targetUid) : undefined;
+      const notifResult = await requestBrowserNotifications(activeUid || undefined);
 
       // 2. Request Microphone sequentially (not concurrent, so mobile browsers don't auto-dismiss)
       try {
@@ -75,14 +79,18 @@ export default function MandatoryNotificationModal() {
         console.warn("Microphone permission note:", err);
       }
 
-      setStatus(getNotificationStatus());
-      if (notifResult) {
+      const current = getNotificationStatus();
+      setStatus(current);
+
+      if (current === "granted" || notifResult) {
         try {
           localStorage.setItem("youssef_permissions_confirmed", "true");
         } catch {}
-      } else {
-        alert("تم طلب إذن المتصفح لكن فشل تسجيل رمز الإشعارات (FCM Token). يرجى الضغط على زر التحقق اليدوي بالأسفل أو التأكد من الاتصال بالإنترنت.");
+      } else if (current === "denied") {
+        setStatus("denied");
       }
+    } catch (err) {
+      console.error("Permission request error:", err);
     } finally {
       setLoading(false);
     }
@@ -91,31 +99,46 @@ export default function MandatoryNotificationModal() {
   const handleTestNotification = async () => {
     setIsTestingNotif(true);
     try {
-      await testSystemNotification(userProfile?.uid);
+      const targetUid =
+        userProfile?.uid ||
+        auth.currentUser?.uid ||
+        (typeof window !== "undefined" ? localStorage.getItem("youssef_app_uid") : undefined);
+      await testSystemNotification(targetUid || undefined);
     } finally {
       setIsTestingNotif(false);
     }
   };
 
   const handleManualCheck = async () => {
-    if (getNotificationStatus() !== "granted" || !userProfile?.uid) {
+    const current = getNotificationStatus();
+    if (current !== "granted") {
       alert("لم يتم تفعيل إذن الإشعارات بعد في المتصفح. اضغط على رمز القفل 🔒 وقم باختيار (سماح/Allow).");
       return;
     }
     setLoading(true);
     try {
-      const res = await enableNotifications(userProfile.uid);
-      if (res.ok) {
-        setStatus("granted");
-        try {
-          localStorage.setItem("youssef_permissions_confirmed", "true");
-        } catch {}
-      } else {
-        alert("فشل تسجيل توكن الإشعارات، يرجى التأكد من اتصال الإنترنت وحاول مجدداً.");
+      const targetUid =
+        userProfile?.uid ||
+        auth.currentUser?.uid ||
+        (typeof window !== "undefined" ? localStorage.getItem("youssef_app_uid") : null);
+
+      if (auth.currentUser && targetUid) {
+        await enableNotifications(targetUid);
       }
+      setStatus("granted");
+      try {
+        localStorage.setItem("youssef_permissions_confirmed", "true");
+      } catch {}
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDismiss = () => {
+    try {
+      localStorage.setItem("youssef_permissions_confirmed", "true");
+    } catch {}
+    setStatus("granted");
   };
 
   return (
@@ -213,6 +236,24 @@ export default function MandatoryNotificationModal() {
           >
             <Send size={14} />
             {isTestingNotif ? "جاري إرسال الإشعار..." : "تجربة إشعار فوري على هاتفك الآن 🔔"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDismiss}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "rgba(255, 255, 255, 0.45)",
+              fontSize: "12px",
+              cursor: "pointer",
+              padding: "6px 12px",
+              marginTop: "4px",
+              textDecoration: "underline",
+              transition: "color 0.2s ease",
+            }}
+          >
+            المتابعة لتسجيل الدخول / استخدام التطبيق
           </button>
         </div>
       </div>
