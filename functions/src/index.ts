@@ -40,6 +40,13 @@ async function pushToUser(uid: string, data: Record<string, string>, urgent = fa
   await Promise.all(dead.map((t) => db.doc(`users/${uid}/fcmTokens/${t}`).delete()));
 }
 
+function getSafeIcon(photo: unknown): string {
+  if (typeof photo === "string" && photo.startsWith("https://")) {
+    return photo;
+  }
+  return "/icons/icon-192.png";
+}
+
 function preview(msg: FirebaseFirestore.DocumentData): string {
   switch (msg.type) {
     case "image": return "📷 صورة";
@@ -85,7 +92,7 @@ export const onNewMessage = onDocumentCreated(
           type: "message",
           title: `${senderName} 💬`,
           body: bodyText,
-          icon: sender.get("photoURL") ?? "/icons/icon-192.png",
+          icon: getSafeIcon(sender.get("photoURL")),
           chatId,
           url: `/chat/${chatId}`,
         });
@@ -119,7 +126,7 @@ export const onIncomingCall = onDocumentCreated(
         type: "call",
         title: `${callerName} 📞`,
         body: call.type === "video" ? "📹 مكالمة فيديو واردة..." : "📞 مكالمة صوتية واردة...",
-        icon: caller.get("photoURL") ?? "/icons/icon-192.png",
+        icon: getSafeIcon(caller.get("photoURL")),
         callId,
         chatId: call.chatId ?? callId,
         url: `/calls`,

@@ -1,13 +1,25 @@
 "use client";
 
 import React, { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { registerServiceWorker } from "@/lib/utils/pwaNotifications";
+import { listenNotificationClicks } from "@/lib/notifications";
 import MandatoryNotificationModal from "./MandatoryNotificationModal";
 import PWAInstallBanner from "./PWAInstallBanner";
 
 export default function PWAClientManager() {
+  const router = useRouter();
+
   useEffect(() => {
     registerServiceWorker();
+
+    // Global listener for notification clicks across all pages
+    const unsubClicks = listenNotificationClicks((chatId) => {
+      if (typeof window !== "undefined") {
+        window.focus();
+      }
+      router.push(`/chat/${chatId}`);
+    });
 
     // Prevent mobile Chrome Touch-to-Search on non-editable elements
     const handleSelectionChange = () => {
@@ -29,8 +41,9 @@ export default function PWAClientManager() {
     document.addEventListener("selectionchange", handleSelectionChange);
     return () => {
       document.removeEventListener("selectionchange", handleSelectionChange);
+      unsubClicks();
     };
-  }, []);
+  }, [router]);
 
   return (
     <>

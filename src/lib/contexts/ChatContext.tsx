@@ -75,10 +75,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
               const senderName =
                 chat.participantNames?.[chat.lastMessage?.senderId || ""] ||
                 (chat.type === "direct" ? "رسالة جديدة 💬" : (chat.name || "رسالة جديدة 💬"));
+              const rawText = chat.lastMessage?.text || "أرسل لك رسالة جديدة";
+              const messageText = rawText.startsWith("🔒#YF:") ? "🔒 رسالة جديدة" : rawText;
+
               playNotificationChime();
               dispatchAppNotification({
                 title: `${senderName} 💬`,
-                body: chat.lastMessage?.text || "أرسل لك رسالة جديدة",
+                body: messageText,
                 tag: `chat-${chat.id}`,
                 url: `/chat/${chat.id}`,
               });

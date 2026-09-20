@@ -124,29 +124,35 @@ export default function NotificationSettingsModal({
   };
 
   const handleToggleSystemPermission = async () => {
-    if (permission === "granted") {
-      setLoading(true);
-      try {
-        await disableNotifications(uid);
-        alert("تم إلغاء تسجيل الإشعارات السحابية على هذا الجهاز.");
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
+    setLoading(true);
+    try {
+      const res = await enableNotifications(uid);
+      if (res.ok) {
+        setPermission("granted");
+        playNotificationChime();
+        alert("تمت مزامنة توكن الإشعارات السحابية بنجاح ✅");
+      } else if (res.reason === "denied") {
+        setPermission("denied");
+      } else {
+        alert("فشلت المزامنة، تأكد من اتصال الإنترنت وإعدادات المتصفح.");
       }
-    } else {
-      setLoading(true);
-      try {
-        const res = await enableNotifications(uid);
-        if (res.ok) {
-          setPermission("granted");
-          playNotificationChime();
-        } else if (res.reason === "denied") {
-          setPermission("denied");
-        }
-      } finally {
-        setLoading(false);
-      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisableNotifications = async () => {
+    if (!confirm("هل أنت متأكد من تعطيل الإشعارات على هذا الجهاز؟ لن تتلقى رسائل أو مكالمات عند إغلاق التطبيق.")) return;
+    setLoading(true);
+    try {
+      await disableNotifications(uid);
+      alert("تم إيقاف الإشعارات السحابية على هذا الجهاز بنجاح.");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -243,18 +249,39 @@ export default function NotificationSettingsModal({
             </div>
 
             {permission !== "denied" && (
-              <button
-                type="button"
-                className={styles.notifStatusActionBtn}
-                onClick={handleToggleSystemPermission}
-                disabled={loading}
-              >
-                {loading
-                  ? "جاري المعالجة..."
-                  : permission === "granted"
-                  ? "إعادة المزامنة 🔄"
-                  : "تفعيل الآن 🚀"}
-              </button>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className={styles.notifStatusActionBtn}
+                  onClick={handleToggleSystemPermission}
+                  disabled={loading}
+                >
+                  {loading
+                    ? "جاري المعالجة..."
+                    : permission === "granted"
+                    ? "إعادة المزامنة 🔄"
+                    : "تفعيل الآن 🚀"}
+                </button>
+                {permission === "granted" && (
+                  <button
+                    type="button"
+                    style={{
+                      background: "transparent",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      color: "#ef4444",
+                      padding: "6px 12px",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      transition: "0.2s ease",
+                    }}
+                    onClick={handleDisableNotifications}
+                    disabled={loading}
+                  >
+                    إيقاف الإشعارات ✕
+                  </button>
+                )}
+              </div>
             )}
           </div>
 

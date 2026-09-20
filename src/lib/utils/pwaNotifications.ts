@@ -116,78 +116,41 @@ export async function dispatchAppNotification({
   tag?: string;
 }) {
   if (typeof window === "undefined" || !("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
+  if (Notification.permission !== "granted" || !("serviceWorker" in navigator)) return;
+
+  const kind = tag?.startsWith("call-") ? "calls" : "messages";
+  if (localStorage.getItem(`notif_pref_${kind}`) === "false") return;
+
+  let reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+  if (!reg) {
+    reg = await navigator.serviceWorker.getRegistration();
+  }
+  if (!reg) return;
+
+  const hidePreview = localStorage.getItem("notif_pref_preview") === "false";
+  const safeBody = hidePreview
+    ? "رسالة جديدة 💬"
+    : body.startsWith("🔒#YF:")
+    ? "🔒 رسالة جديدة"
+    : body;
 
   const isCall = Boolean(tag && tag.startsWith("call-"));
-
-  // Check user preferences
-  try {
-    if (!isCall && localStorage.getItem("notif_pref_messages") === "false") {
-      return;
-    }
-    if (isCall && localStorage.getItem("notif_pref_calls") === "false") {
-      return;
-    }
-    if (!isCall && localStorage.getItem("notif_pref_preview") === "false") {
-      body = "رسالة جديدة 💬";
-    }
-  } catch (e) {}
-
-  const vibrateEnabled = typeof window !== "undefined" ? localStorage.getItem("notif_pref_vibrate") !== "false" : true;
+  const vibrateEnabled = localStorage.getItem("notif_pref_vibrate") !== "false";
 
   const notifOptions: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
-    body,
+    body: safeBody,
     icon,
     badge: "/icons/badge-72.png",
-    tag: tag || `app-notif-${Date.now()}`,
+    tag: tag || `app-${Date.now()}`,
     renotify: true,
-    vibrate: vibrateEnabled ? (isCall ? [300, 150, 300, 150, 300] : [200, 100, 200]) : undefined,
-    data: { url, chatId: tag?.replace(/^(chat|msg|call)-/, "") },
+    vibrate: !vibrateEnabled ? [] : (isCall ? [300, 150, 300, 150, 300] : [200, 100, 200]),
+    data: { url, chatId: tag?.replace(/^(chat|call|msg)-/, "") },
   };
 
-  // 1. Show via FCM Service Worker registration directly
   try {
-    let reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
-    if (!reg) {
-      reg = await navigator.serviceWorker.getRegistration();
-    }
-    if (reg && reg.showNotification) {
-      await reg.showNotification(title, notifOptions);
-      return;
-    }
-  } catch (swErr) {
-    console.warn("SW getRegistration showNotification error:", swErr);
-  }
-
-  // 2. Secondary: If registration is pending, check ready
-  try {
-    if ("serviceWorker" in navigator) {
-      const readyReg = await Promise.race([
-        navigator.serviceWorker.ready,
-        new Promise<null>((res) => setTimeout(() => res(null), 400)),
-      ]);
-      if (readyReg && readyReg.showNotification) {
-        await readyReg.showNotification(title, notifOptions);
-        return;
-      }
-    }
-  } catch (readyErr) {
-    console.warn("SW ready showNotification error:", readyErr);
-  }
-
-  // 3. Fallback: Standard DOM Notification (Desktop only)
-  try {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (!isMobile && typeof Notification !== "undefined") {
-      const notif = new Notification(title, notifOptions);
-      notif.onclick = () => {
-        window.focus();
-        window.location.href = url;
-        notif.close();
-      };
-    }
-  } catch (domErr) {
-    console.warn("DOM Notification fallback note:", domErr);
+    await reg.showNotification(title, notifOptions);
+  } catch (err) {
+    console.warn("reg.showNotification failed:", err);
   }
 }
 

@@ -22,7 +22,7 @@
 عند تنزيل وتثبيت التطبيق على الهواتف أو استخدام متصفحات Chrome وSafari، كان نظام التشغيل يرفض طلب الميكروفون أو يظهر للمستخدم "مفيش سماح من موبايل"؛ وذلك بسبب محاولة طلب إذن الميكروفون والكاميرا والإشعارات في نفس اللحظة بالتزامن في مودال التشغيل، وهو ما تقوم المتصفحات الحديثة بحظره تلقائياً لحماية الخصوصية.
 
 ### الحل المطبق:
-1. **فصل طلب الأذونات تسلسلياً**: في [`MandatoryNotificationModal.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/pwa/MandatoryNotificationModal.tsx)، يتم طلب الإشعارات أولاً ثم الميكروفون بشكل مستقل دون تضارب مع واجهة النظام.
+1. **فصل طلب الأذونات تسلسلياً**: في [`MandatoryNotificationModal.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/pwa/MandatoryNotificationModal.tsx)، يتم طلب الإشعارات أولاً مع تسجيل توكن FCM فوراً، ثم طلب الميكروفون بشكل مستقل دون تضارب مع واجهة النظام.
 2. **قيود صوتية مرنة للموبايل**: في [`ChatClient.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/app/chat/[chatId]/ChatClient.tsx)، يتم طلب الميكروفون بقيود متقدمة:
    ```typescript
    { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
@@ -72,17 +72,17 @@
 
 - تم استيراد خطوط جوجل الهندسية الرسمية (`Space Grotesk` و `Outfit`) داخل [`src/app/layout.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/app/layout.tsx).
 - تم تغيير الكلمة في الهيدر العلوي لشريط الموبايل وقائمة الديسكتوب في [`ChatSidebar.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/chat/ChatSidebar.tsx) إلى:
-  ```html
-  <span className={styles.brandTitleText}>YOUSSEF APP</span>
-  ```
+   ```html
+   <span className={styles.brandTitleText}>YOUSSEF APP</span>
+   ```
 - تم تصميم الفونت بخصائص رسمية صارمة: زوايا عمودية هندسية، تباعد أحرف متناسق (`letter-spacing: 0.08em; font-weight: 800; text-transform: uppercase;`) مع تدرج معدني عالي التباين.
 - تحديث تسمية التبويب في الموبايل إلى "الرسائل" داخل [`MobileBottomNav.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/chat/MobileBottomNav.tsx).
 
 ---
 
-## 6. 📜 الكود الكامل والشامل المستخدم في ميزة الإشعارات (Full Notifications Codebase)
+## 6. 📜 الأكواد الفعلية الكاملة لنظام الإشعارات من الملفات المصدرية
 
-فيما يلي كل الأكواد البرمجية التي تشغل ميزة الإشعارات بكامل أجزائها في التطبيق:
+فيما يلي الأكواد البرمجية الحية والمحدثة بالكامل التي تشغل ميزة ونظام الإشعارات في المشروع:
 
 ### أ) محرك إشعارات Firebase Cloud Messaging (FCM)
 **الملف:** [`src/lib/notifications.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/lib/notifications.ts)
@@ -201,6 +201,7 @@ export function listenNotificationClicks(onOpenChat: (chatId: string) => void) {
   navigator.serviceWorker.addEventListener("message", handler);
   return () => navigator.serviceWorker.removeEventListener("message", handler);
 }
+
 ```
 
 ---
@@ -209,6 +210,7 @@ export function listenNotificationClicks(onOpenChat: (chatId: string) => void) {
 **الملف:** [`public/firebase-messaging-sw.js`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/firebase-messaging-sw.js)
 ```javascript
 /* eslint-disable no-undef */
+// Place this file in /public so it is served at /firebase-messaging-sw.js
 importScripts("https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging-compat.js");
 
@@ -224,7 +226,8 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Data-only messages prevent duplicate display by browser
+// We send DATA-ONLY messages so we fully control how the notification looks
+// (a `notification` key would make FCM auto-display and cause duplicates).
 messaging.onBackgroundMessage((payload) => {
   const d = payload.data || {};
   const isCall = d.type === "call";
@@ -232,13 +235,13 @@ messaging.onBackgroundMessage((payload) => {
   return self.registration.showNotification(d.title || "Youssef App", {
     body: d.body || "",
     icon: d.icon || "/icons/icon-192.png",
-    badge: "/icons/badge-72.png",
-    tag: isCall ? `call-${d.chatId}` : `chat-${d.chatId}`,
-    renotify: true,
-    requireInteraction: isCall,
+    badge: "/icons/badge-72.png", // small monochrome icon (Android/Chrome)
+    tag: isCall ? (d.callId ? `call-${d.callId}` : `call-${d.chatId}`) : `chat-${d.chatId}`, // unique per chat or call
+    renotify: true, // still alert on new message in same chat
+    requireInteraction: isCall, // calls stay until user acts
     vibrate: isCall ? [300, 150, 300, 150, 300] : [120],
     dir: "auto",
-    data: { url: d.url || "/", chatId: d.chatId, type: d.type || "message" },
+    data: { url: d.url || "/", chatId: d.chatId, callId: d.callId, type: d.type || "message" },
     actions: isCall
       ? [
           { action: "answer", title: "رد" },
@@ -246,6 +249,15 @@ messaging.onBackgroundMessage((payload) => {
         ]
       : [],
   });
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SHOW_NOTIFICATION") {
+    const { title, options } = event.data;
+    if (self.registration && self.registration.showNotification) {
+      self.registration.showNotification(title || "Youssef App", options || {});
+    }
+  }
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -269,6 +281,7 @@ self.addEventListener("notificationclick", (event) => {
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
+
 ```
 
 ---
@@ -280,7 +293,7 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 export const SW_SCOPE = "/firebase-cloud-messaging-push-scope";
 
-// Web Audio API Chime Synthesizer (توليد نغمة تنبيه نقية D5 -> A5 باحترام كتم الصوت)
+// Web Audio API Chime Synthesizer (Zero external dependencies, always plays)
 export function playNotificationChime() {
   try {
     if (typeof window !== "undefined" && localStorage.getItem("notif_pref_sound") === "false") {
@@ -319,6 +332,21 @@ export function playNotificationChime() {
   }
 }
 
+// Service Worker Registration
+export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+    return null;
+  }
+  try {
+    const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    return reg;
+  } catch (err) {
+    console.warn("ServiceWorker registration failed:", err);
+    return null;
+  }
+}
+
+// Notification Permissions
 export type NotificationStatus = "granted" | "denied" | "default" | "unsupported";
 
 export function getNotificationStatus(): NotificationStatus {
@@ -364,6 +392,7 @@ export async function requestBrowserNotifications(uid?: string): Promise<boolean
   }
 }
 
+// Dispatch browser notification (FCM SW registration + user preferences)
 export async function dispatchAppNotification({
   title,
   body,
@@ -378,60 +407,109 @@ export async function dispatchAppNotification({
   tag?: string;
 }) {
   if (typeof window === "undefined" || !("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
+  if (Notification.permission !== "granted" || !("serviceWorker" in navigator)) return;
 
-  const notifOptions = {
-    body,
+  const kind = tag?.startsWith("call-") ? "calls" : "messages";
+  if (localStorage.getItem(`notif_pref_${kind}`) === "false") return;
+
+  let reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+  if (!reg) {
+    reg = await navigator.serviceWorker.getRegistration();
+  }
+  if (!reg) return;
+
+  const hidePreview = localStorage.getItem("notif_pref_preview") === "false";
+  const safeBody = hidePreview
+    ? "رسالة جديدة 💬"
+    : body.startsWith("🔒#YF:")
+    ? "🔒 رسالة جديدة"
+    : body;
+
+  const isCall = Boolean(tag && tag.startsWith("call-"));
+  const vibrateEnabled = localStorage.getItem("notif_pref_vibrate") !== "false";
+
+  const notifOptions: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
+    body: safeBody,
     icon,
-    badge: "/icons/icon-192.png",
-    vibrate: [200, 100, 200],
-    tag: tag || `app-notif-${Date.now()}`,
-    data: { url },
+    badge: "/icons/badge-72.png",
+    tag: tag || `app-${Date.now()}`,
+    renotify: true,
+    vibrate: !vibrateEnabled ? [] : (isCall ? [300, 150, 300, 150, 300] : [200, 100, 200]),
+    data: { url, chatId: tag?.replace(/^(chat|call|msg)-/, "") },
   };
 
-  // Dispatch via ServiceWorker if available
-  if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-    try {
-      navigator.serviceWorker.controller.postMessage({
-        type: "SHOW_NOTIFICATION",
-        title,
-        options: notifOptions,
-      });
-      return;
-    } catch (e) {}
-  }
-
-  // Fallback to standard Notification API
   try {
-    const notif = new Notification(title, notifOptions);
-    notif.onclick = () => {
-      window.focus();
-      window.location.href = url;
-      notif.close();
-    };
-  } catch (e) {}
+    await reg.showNotification(title, notifOptions);
+  } catch (err) {
+    console.warn("reg.showNotification failed:", err);
+  }
 }
 
-export async function testSystemNotification(): Promise<boolean> {
+export async function testSystemNotification(uid?: string): Promise<boolean> {
   const status = getNotificationStatus();
   if (status !== "granted") {
-    const requested = await requestBrowserNotifications();
-    if (!requested) return false;
+    const granted = await requestBrowserNotifications(uid);
+    if (!granted) return false;
   }
-
   playNotificationChime();
   await dispatchAppNotification({
-    title: "تنبيه تجريبي من يوسف شات 🔔",
-    body: "الإشعارات تعمل بنجاح وبسرعة فائقة على هاتفك الآن!",
+    title: "إشعار تجريبي من Youssef App 🚀",
+    body: "تهانينا! الإشعارات تعمل بنجاح وستصلك كافة الرسائل والمكالمات في الوقت الفعلي.",
     url: "/chat",
+    tag: `chat-test-${Date.now()}`,
   });
   return true;
 }
+
+// PWA Utilities
+export function isAppInstalledPWA(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true
+  );
+}
+
+// PWA deferred prompt holder
+let deferredPrompt: any = null;
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (e) => {
+    // Save event for custom UI button trigger, while allowing native browser banner
+    deferredPrompt = e;
+    window.dispatchEvent(new Event("pwa-can-install"));
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    window.dispatchEvent(new Event("pwa-installed"));
+  });
+}
+
+export function getDeferredPrompt() {
+  return deferredPrompt;
+}
+
+export async function promptPWAInstall(): Promise<boolean> {
+  if (!deferredPrompt) {
+    return false;
+  }
+  try {
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    return outcome === "accepted";
+  } catch (err) {
+    console.error("PWA install prompt error:", err);
+    return false;
+  }
+}
+
 ```
 
 ---
 
-### د) المكون التفاعلي: نافذة إعدادات الإشعارات الشاملة
+### د) المكون التفاعلي: نافذة إعدادات الإشعارات الشاملة (Firestore Sync + Resync + Safe Disable)
 **الملف:** [`src/components/chat/NotificationSettingsModal.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/chat/NotificationSettingsModal.tsx)
 ```tsx
 "use client";
@@ -455,6 +533,8 @@ import {
 } from "lucide-react";
 import { enableNotifications, disableNotifications, refreshToken } from "@/lib/notifications";
 import { testSystemNotification, playNotificationChime } from "@/lib/utils/pwaNotifications";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
 import styles from "@/styles/chat.module.css";
 
 interface NotificationSettingsModalProps {
@@ -473,7 +553,7 @@ export default function NotificationSettingsModal({
   const [testing, setTesting] = useState(false);
   const [testSuccess, setTestSuccess] = useState(false);
 
-  // Settings State (stored in localStorage)
+  // Settings State (stored in localStorage & Firestore)
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [messagesEnabled, setMessagesEnabled] = useState(true);
   const [callsEnabled, setCallsEnabled] = useState(true);
@@ -483,12 +563,14 @@ export default function NotificationSettingsModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    // Check system permission
     if (typeof window !== "undefined" && "Notification" in window) {
       setPermission(Notification.permission);
     } else {
       setPermission("unsupported");
     }
 
+    // Load saved preferences from localStorage first
     try {
       setSoundEnabled(localStorage.getItem("notif_pref_sound") !== "false");
       setMessagesEnabled(localStorage.getItem("notif_pref_messages") !== "false");
@@ -496,11 +578,44 @@ export default function NotificationSettingsModal({
       setPreviewEnabled(localStorage.getItem("notif_pref_preview") !== "false");
       setVibrateEnabled(localStorage.getItem("notif_pref_vibrate") !== "false");
     } catch (e) {}
-  }, [isOpen]);
+
+    // Also sync from Firestore user profile if available
+    if (uid) {
+      getDoc(doc(db, "users", uid))
+        .then((snap) => {
+          if (snap.exists()) {
+            const prefs = snap.data()?.notificationPreferences;
+            if (prefs) {
+              if (typeof prefs.sound === "boolean") {
+                setSoundEnabled(prefs.sound);
+                localStorage.setItem("notif_pref_sound", String(prefs.sound));
+              }
+              if (typeof prefs.messages === "boolean") {
+                setMessagesEnabled(prefs.messages);
+                localStorage.setItem("notif_pref_messages", String(prefs.messages));
+              }
+              if (typeof prefs.calls === "boolean") {
+                setCallsEnabled(prefs.calls);
+                localStorage.setItem("notif_pref_calls", String(prefs.calls));
+              }
+              if (typeof prefs.preview === "boolean") {
+                setPreviewEnabled(prefs.preview);
+                localStorage.setItem("notif_pref_preview", String(prefs.preview));
+              }
+              if (typeof prefs.vibrate === "boolean") {
+                setVibrateEnabled(prefs.vibrate);
+                localStorage.setItem("notif_pref_vibrate", String(prefs.vibrate));
+              }
+            }
+          }
+        })
+        .catch((e) => console.warn("Sync prefs from Firestore note:", e));
+    }
+  }, [isOpen, uid]);
 
   if (!isOpen) return null;
 
-  const handleTogglePreference = (key: string, current: boolean, setter: (val: boolean) => void) => {
+  const handleTogglePreference = async (key: string, current: boolean, setter: (val: boolean) => void) => {
     const next = !current;
     setter(next);
     try {
@@ -509,32 +624,49 @@ export default function NotificationSettingsModal({
     if (key === "sound" && next) {
       playNotificationChime();
     }
+
+    // Save to Firestore so Cloud Functions know user preferences
+    if (uid) {
+      try {
+        await updateDoc(doc(db, "users", uid), {
+          [`notificationPreferences.${key}`]: next,
+        });
+      } catch (err) {
+        console.warn("Syncing notification preferences to Firestore failed:", err);
+      }
+    }
   };
 
   const handleToggleSystemPermission = async () => {
-    if (permission === "granted") {
-      setLoading(true);
-      try {
-        await disableNotifications(uid);
-        alert("تم إلغاء تسجيل الإشعارات السحابية على هذا الجهاز.");
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
+    setLoading(true);
+    try {
+      const res = await enableNotifications(uid);
+      if (res.ok) {
+        setPermission("granted");
+        playNotificationChime();
+        alert("تمت مزامنة توكن الإشعارات السحابية بنجاح ✅");
+      } else if (res.reason === "denied") {
+        setPermission("denied");
+      } else {
+        alert("فشلت المزامنة، تأكد من اتصال الإنترنت وإعدادات المتصفح.");
       }
-    } else {
-      setLoading(true);
-      try {
-        const res = await enableNotifications(uid);
-        if (res.ok) {
-          setPermission("granted");
-          playNotificationChime();
-        } else if (res.reason === "denied") {
-          setPermission("denied");
-        }
-      } finally {
-        setLoading(false);
-      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisableNotifications = async () => {
+    if (!confirm("هل أنت متأكد من تعطيل الإشعارات على هذا الجهاز؟ لن تتلقى رسائل أو مكالمات عند إغلاق التطبيق.")) return;
+    setLoading(true);
+    try {
+      await disableNotifications(uid);
+      alert("تم إيقاف الإشعارات السحابية على هذا الجهاز بنجاح.");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -543,7 +675,7 @@ export default function NotificationSettingsModal({
     setTestSuccess(false);
     try {
       playNotificationChime();
-      const ok = await testSystemNotification();
+      const ok = await testSystemNotification(uid);
       if (ok) {
         setTestSuccess(true);
         setTimeout(() => setTestSuccess(false), 3000);
@@ -631,18 +763,39 @@ export default function NotificationSettingsModal({
             </div>
 
             {permission !== "denied" && (
-              <button
-                type="button"
-                className={styles.notifStatusActionBtn}
-                onClick={handleToggleSystemPermission}
-                disabled={loading}
-              >
-                {loading
-                  ? "جاري المعالجة..."
-                  : permission === "granted"
-                  ? "إعادة المزامنة 🔄"
-                  : "تفعيل الآن 🚀"}
-              </button>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className={styles.notifStatusActionBtn}
+                  onClick={handleToggleSystemPermission}
+                  disabled={loading}
+                >
+                  {loading
+                    ? "جاري المعالجة..."
+                    : permission === "granted"
+                    ? "إعادة المزامنة 🔄"
+                    : "تفعيل الآن 🚀"}
+                </button>
+                {permission === "granted" && (
+                  <button
+                    type="button"
+                    style={{
+                      background: "transparent",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      color: "#ef4444",
+                      padding: "6px 12px",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      transition: "0.2s ease",
+                    }}
+                    onClick={handleDisableNotifications}
+                    disabled={loading}
+                  >
+                    إيقاف الإشعارات ✕
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -804,6 +957,7 @@ export default function NotificationSettingsModal({
     </div>
   );
 }
+
 ```
 
 ---
@@ -866,11 +1020,226 @@ export default function NotificationPrompt({ uid }: { uid: string }) {
     </div>
   );
 }
+
 ```
 
 ---
 
-### و) ربط واستقبال إشعارات الرسائل والمكالمات في الوقت الفعلي
+### و) نافذة التشغيل الإلزامية للأذونات (Mandatory Permission Modal)
+**الملف:** [`src/components/pwa/MandatoryNotificationModal.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/pwa/MandatoryNotificationModal.tsx)
+```tsx
+"use client";
+
+import React, { useState, useEffect } from "react";
+import {
+  getNotificationStatus,
+  requestBrowserNotifications,
+  testSystemNotification,
+  NotificationStatus,
+} from "@/lib/utils/pwaNotifications";
+import styles from "@/styles/pwa.module.css";
+import {
+  Bell,
+  Mic,
+  Camera,
+  CheckCircle2,
+  RefreshCw,
+  AlertTriangle,
+  Send,
+} from "lucide-react";
+import { useAuth } from "@/lib/contexts/AuthContext";
+
+export default function MandatoryNotificationModal() {
+  const { userProfile } = useAuth();
+  const [status, setStatus] = useState<NotificationStatus>("granted");
+  const [micGranted, setMicGranted] = useState(false);
+  const [camGranted, setCamGranted] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isTestingNotif, setIsTestingNotif] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const current = getNotificationStatus();
+    setStatus(current);
+
+    // Check if permissions were previously confirmed
+    const confirmed = localStorage.getItem("youssef_permissions_confirmed");
+    if (confirmed && current === "granted") {
+      setStatus("granted");
+    }
+
+    const handleFocus = () => {
+      setStatus(getNotificationStatus());
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, []);
+
+  if (!mounted || (status === "granted" && localStorage.getItem("youssef_permissions_confirmed") === "true") || status === "unsupported") {
+    return null;
+  }
+
+  const handleRequestAll = async () => {
+    setLoading(true);
+    try {
+      // 1. Request Notifications first with dedicated gesture and register FCM token
+      const notifResult = await requestBrowserNotifications(userProfile?.uid);
+
+      // 2. Request Microphone sequentially (not concurrent, so mobile browsers don't auto-dismiss)
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const audioStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true },
+          });
+          audioStream.getTracks().forEach((t) => t.stop());
+          setMicGranted(true);
+        }
+      } catch (err) {
+        console.warn("Microphone permission note:", err);
+      }
+
+      const notifNow = getNotificationStatus();
+      setStatus(notifNow);
+      if (notifNow === "granted" || notifResult) {
+        try {
+          localStorage.setItem("youssef_permissions_confirmed", "true");
+        } catch {}
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    setIsTestingNotif(true);
+    try {
+      await testSystemNotification(userProfile?.uid);
+    } finally {
+      setIsTestingNotif(false);
+    }
+  };
+
+  const handleManualCheck = () => {
+    const current = getNotificationStatus();
+    setStatus(current);
+    if (current === "granted") {
+      try {
+        localStorage.setItem("youssef_permissions_confirmed", "true");
+      } catch {}
+    } else {
+      alert("لم يتم تفعيل إذن الإشعارات بعد في المتصفح. اضغط على رمز القفل 🔒 أعلى شريط العنوان وقم باختيار (سماح/Allow) للإشعارات.");
+    }
+  };
+
+  return (
+    <div className={styles.notifOverlay}>
+      <div className={styles.notifCard}>
+        <div className={styles.notifGlow} />
+
+        <div className={styles.notifIconWrap}>
+          <div className={styles.notifPulseRing} />
+          <Bell size={36} color="#818CF8" />
+        </div>
+
+        <div className={styles.notifBadge}>
+          <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>
+            verified_user
+          </span>
+          تفعيل أذونات التطبيق
+        </div>
+
+        <h2 className={styles.notifTitle}>أذونات التشغيل قبل التنزيل</h2>
+
+        <p className={styles.notifDesc}>
+          لضمان عمل الفويس (الرسائل الصوتية)، وإرسال الصور، واستقبال الرسائل والمكالمات فورياً حتى لو التطبيق مغلق، يُرجى تفعيل الأذونات التالية:
+        </p>
+
+        {status === "denied" ? (
+          <div className={styles.notifBlockedGuide}>
+            <div className={styles.notifBlockedTitle}>
+              <AlertTriangle size={16} />
+              الإشعارات محظورة في متصفحك حالياً:
+            </div>
+            <ol className={styles.notifBlockedSteps}>
+              <li>اضغط على رمز القفل 🔒 أو إعدادات الموقع في شريط العنوان بالأعلى.</li>
+              <li>ابحث عن إذن &quot;الإشعارات&quot; (Notifications) وقم بتغييره إلى &quot;سماح&quot; (Allow).</li>
+              <li>بعد التفعيل، اضغط على زر التحقق أدناه للمتابعة.</li>
+            </ol>
+          </div>
+        ) : (
+          <div className={styles.notifFeatures}>
+            <div className={styles.notifFeatureItem}>
+              <Bell className={styles.notifFeatureIcon} size={18} />
+              <span>الإشعارات الفورية: تنبيه بالرسائل والمكالمات في الخلفية</span>
+            </div>
+            <div className={styles.notifFeatureItem}>
+              <Mic className={styles.notifFeatureIcon} size={18} />
+              <span>الميكروفون والصوت: لتسجيل الفويس والمكالمات الصوتية</span>
+            </div>
+            <div className={styles.notifFeatureItem}>
+              <Camera className={styles.notifFeatureIcon} size={18} />
+              <span>الكاميرا والصور: لإرسال الصور والتقاطها ومكالمات الفيديو</span>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {status === "denied" ? (
+            <button
+              type="button"
+              className={styles.notifBtnPrimary}
+              onClick={handleManualCheck}
+            >
+              <RefreshCw size={18} />
+              تم السماح، إعادة التحقق والبدء
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.notifBtnPrimary}
+              onClick={handleRequestAll}
+              disabled={loading}
+            >
+              <CheckCircle2 size={18} />
+              {loading ? "جاري تفعيل الأذونات..." : "تفعيل كافة الأذونات (إشعارات + فويس + صور) 🚀"}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleTestNotification}
+            disabled={isTestingNotif}
+            style={{
+              padding: "10px 16px",
+              background: "rgba(255, 255, 255, 0.06)",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              borderRadius: "14px",
+              color: "#C7D2FE",
+              fontSize: "13px",
+              fontWeight: "600",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+            }}
+          >
+            <Send size={14} />
+            {isTestingNotif ? "جاري إرسال الإشعار..." : "تجربة إشعار فوري على هاتفك الآن 🔔"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+```
+
+---
+
+### ز) ربط واستقبال إشعارات الرسائل والمكالمات في الوقت الفعلي مع حجب الشفرة
 **في سياق المحادثات [`src/lib/contexts/ChatContext.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/lib/contexts/ChatContext.tsx):**
 ```typescript
 // رصد وصول رسائل جديدة أثناء خفاء النافذة أو في محادثة أخرى وتشغيل النغمة والإشعار
@@ -882,14 +1251,16 @@ if (hasNewMessage) {
     const senderName =
       chat.participantNames?.[chat.lastMessage?.senderId || ""] ||
       (chat.type === "direct" ? "رسالة جديدة 💬" : (chat.name || "رسالة جديدة 💬"));
-    
-    // تشغيل نغمة الصوت (مع فحص التفضيل)
+    const rawText = chat.lastMessage?.text || "أرسل لك رسالة جديدة";
+    const messageText = rawText.startsWith("🔒#YF:") ? "🔒 رسالة جديدة" : rawText;
+
+    // تشغيل نغمة الصوت (باحترام تفضيل المستخدم لكتم الصوت)
     playNotificationChime();
 
-    // إرسال الإشعار لمركز إشعارات النظام بتطابق الـ tag
+    // إرسال الإشعار لمركز إشعارات النظام بتطابق الـ tag ومنع التكرار
     dispatchAppNotification({
       title: `${senderName} 💬`,
-      body: chat.lastMessage?.text || "أرسل لك رسالة جديدة",
+      body: messageText,
       tag: `chat-${chat.id}`,
       url: `/chat/${chat.id}`,
     });
@@ -924,15 +1295,15 @@ const unsub = listenForIncomingCalls(userProfile.uid, (call) => {
 
 ### 1) حل الفشل الصامت في `dispatchAppNotification`:
 - **سبب المشكلة السابقة:** كانت الدالة ترسل `postMessage` لـ `navigator.serviceWorker.controller`. لكن سيرفيس وركر FCM مسجل على نطاق مخصص (`/firebase-cloud-messaging-push-scope`)، مما يجعله ليس الـ controller للمجال العام. وكان الاستدعاء يرجع مبكراً قبل الوصول للـ fallback. كما أن الـ fallback باستخدام `new Notification()` يرمي خطأ `TypeError: Illegal constructor` على نظام أندرويد وChrome للموبايل.
-- **الحل الجذري:** 
+- **الحل الجذري المطبق:** 
   1. الاستعلام المباشر عن تسجيل الـ SW بنطاق FCM المخصص عبر `navigator.serviceWorker.getRegistration(SW_SCOPE)` ثم `reg.showNotification(title, notifOptions)`.
-  2. إضافة مستمع لرسائل `message` داخل `public/firebase-messaging-sw.js` لدعم `SHOW_NOTIFICATION`.
-  3. حصر استدعاء `new Notification()` للديسكتوب فقط وحمايته بـ try/catch لمنع انهيار التطبيق على الهواتف.
+  2. إضافة مستمع لرسائل `message` داخل [`public/firebase-messaging-sw.js`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/firebase-messaging-sw.js) لدعم `SHOW_NOTIFICATION`.
+  3. حماية محتوى الإشعار من إظهار التشفير: إذا بدأ النص بـ `🔒#YF:` يتم تحويله تلقائياً إلى `🔒 رسالة جديدة`.
 
 ### 2) القضاء على الإشعارات المكررة بتوحيد الـ Tags:
 - تم توحيد وسوم الإشعار بين الواجهة الأمامية، السيرفيس وركر، والـ Cloud Function:
   - للرسائل: `chat-${chatId}` (استبدال `msg-${chat.id}`)
-  - للمكالمات: `call-${callId}`
+  - للمكالمات: `call-${callId}` و `call-${d.callId || d.chatId}`
 - هذا يضمن أنه حتى لو استقبل الهاتف إشعار الدفع السحابي (Push) وتزامن معه استماع Firestore المحلي في نفس اللحظة، سيقوم نظام التشغيل باستبدال الإشعار بنفس التاج تلقائياً دون أي تكرار مزعج.
 
 ### 3) حفظ تفضيلات الإشعارات في السيرفر وقراءتها في الـ Cloud Function:
@@ -943,14 +1314,21 @@ const unsub = listenForIncomingCalls(userProfile.uid, (call) => {
   - إذا عطل المعاينة (`preview: false`)، يتم إرسال النص العام المجهل "رسالة جديدة 💬" بدلاً من نص الرسالة.
   - إذا عطل المكالمات (`calls: false`)، يتم تخطي رنين المكالمات السحابي.
 
-### 4) ربط التسجيل الفعلي لـ FCM في نافذة التشغيل الإلزامية:
-- تم ربط [`MandatoryNotificationModal.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/pwa/MandatoryNotificationModal.tsx) بدالة `enableNotifications(userProfile.uid)` لضمان تسجيل وحفظ توكن FCM في قاعدة بيانات Firestore فور موافقة المستخدم وليس مجرد أخذ إذن المتصفح العادي.
+### 4) تصحيح سلوك زر "إعادة المزامنة":
+- الزر كان يستدعي `disableNotifications` سابقاً عند كون الإذن `granted`، مما كان يعطل إشعارات المستخدم بالخطأ!
+- تم تصحيحه ليستدعي `enableNotifications(uid)` ويعيد تسجيل وتحديث التوكن، مع إضافة زر منفصل أحمر خاص لإيقاف الإشعارات.
+
+### 5) معالجة سقف حمولة FCM (4KB Limit) ومنع فشل إرسال Base64 Photos:
+- تم إضافة دالة `getSafeIcon` داخل الـ Cloud Functions للتأكد من أن صورة المستخدم المرسلة في الـ Push تبدأ بـ `https://` فقط، وتجنب وضع صور Base64 الطويلة التي تتجاوز سقف 4096 بايت المسموح به في Firebase FCM.
+
+### 6) منع تخزين الـ Service Worker في كاش المتصفح:
+- تم إنشاء ملف [`public/_headers`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_headers) لإجبار خوادم Cloudflare Pages على إرسال ترويسة `Cache-Control: no-cache, no-store, must-revalidate` لملفات السيرفيس وركر، مما يضمن تحديثها فورياً على جميع الهواتف.
 
 ---
 
-## 8. ☁️ كود الـ Cloud Functions لإرسال الإشعارات عند إغلاق التطبيق
+## 8. ☁️ كود الـ Cloud Functions المحدث لإرسال الإشعارات عند إغلاق التطبيق
 
-لكي تصل الإشعارات والمكالمات في الخلفية حتى عندما يكون التطبيق مقفولاً تماماً أو الهاتف في وضع السكون، تم إعداد الـ Cloud Functions التالية:
+لكي تصل الإشعارات والمكالمات في الخلفية حتى عندما يكون التطبيق مقفولاً تماماً أو الهاتف في وضع السكون، هذا هو كود الـ Cloud Functions المحدث بالكامل:
 
 **الملف:** [`functions/src/index.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/functions/src/index.ts)
 ```typescript
@@ -962,6 +1340,15 @@ import { getMessaging } from "firebase-admin/messaging";
 initializeApp();
 const db = getFirestore();
 const REGION = "europe-west1";
+
+/*
+ * ASSUMED DATA MODEL:
+ *   chats/{chatId}                 { participants: string[] }
+ *   chats/{chatId}/messages/{id}   { senderId, text?, type? ("text"|"image"|"audio"|...) }
+ *   users/{uid}                    { displayName, photoURL }
+ *   users/{uid}/fcmTokens/{token}  (written by the client)
+ *   calls/{callId}                 { callerId, callerName, receiverId, status: "ringing" }
+ */
 
 const DEAD = [
   "messaging/registration-token-not-registered",
@@ -985,6 +1372,13 @@ async function pushToUser(uid: string, data: Record<string, string>, urgent = fa
     if (!r.success && DEAD.includes(r.error?.code || "")) dead.push(tokens[i]);
   });
   await Promise.all(dead.map((t) => db.doc(`users/${uid}/fcmTokens/${t}`).delete()));
+}
+
+function getSafeIcon(photo: unknown): string {
+  if (typeof photo === "string" && photo.startsWith("https://")) {
+    return photo;
+  }
+  return "/icons/icon-192.png";
 }
 
 function preview(msg: FirebaseFirestore.DocumentData): string {
@@ -1032,7 +1426,7 @@ export const onNewMessage = onDocumentCreated(
           type: "message",
           title: `${senderName} 💬`,
           body: bodyText,
-          icon: sender.get("photoURL") ?? "/icons/icon-192.png",
+          icon: getSafeIcon(sender.get("photoURL")),
           chatId,
           url: `/chat/${chatId}`,
         });
@@ -1066,7 +1460,7 @@ export const onIncomingCall = onDocumentCreated(
         type: "call",
         title: `${callerName} 📞`,
         body: call.type === "video" ? "📹 مكالمة فيديو واردة..." : "📞 مكالمة صوتية واردة...",
-        icon: caller.get("photoURL") ?? "/icons/icon-192.png",
+        icon: getSafeIcon(caller.get("photoURL")),
         callId,
         chatId: call.chatId ?? callId,
         url: `/calls`,
@@ -1075,9 +1469,10 @@ export const onIncomingCall = onDocumentCreated(
     );
   }
 );
+
 ```
 
-### خطوات تفعيل الإشعارات السحابية في بيئة الإنتاج:
+### خطوات تفعيل واختبار الإشعارات السحابية في بيئة الإنتاج:
 1. **نشر الدوال:**
    ```bash
    firebase deploy --only functions
@@ -1086,6 +1481,11 @@ export const onIncomingCall = onDocumentCreated(
 2. **شهادة Web Push (VAPID Key):**
    - استخراج المفتاح العام من: Firebase Console ← Project Settings ← Cloud Messaging ← Web Push certificates.
    - وضعه في ملف `.env.local` كـ `NEXT_PUBLIC_FIREBASE_VAPID_KEY=...` وفي إعدادات متغيرات البيئة في Cloudflare Pages قبل بناء المشروع.
-3. **التشغيل على iOS:**
-   - تتطلب هواتف iPhone إصدار iOS 16.4 أو أحدث، وأن يقوم المستخدم بإضافة التطبيق للشاشة الرئيسية عبر "Add to Home Screen".
-
+3. **قواعد أمان Firestore:**
+   - تسمح للمستخدم بتحديث تفضيلاته وتوكنات FCM الخاصة به تحت:
+     `match /users/{userId}/fcmTokens/{token} { allow read, write: if request.auth.uid == userId; }`
+4. **طريقة الاختبار الحقيقي على الهاتف:**
+   - تأكد من وجود توكن مسجل في Firestore تحت `users/{uid}/fcmTokens`.
+   - قم بإغلاق التطبيق تماماً وقفل شاشة الهاتف.
+   - أرسل رسالة أو ابدأ مكالمة من حساب آخر.
+   - ستصل الرسالة أو رنين المكالمة عبر إشعار الدفع السحابي بنجاح.
