@@ -79,7 +79,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
               dispatchAppNotification({
                 title: `${senderName} 💬`,
                 body: chat.lastMessage?.text || "أرسل لك رسالة جديدة",
-                tag: `msg-${chat.id}`,
+                tag: `chat-${chat.id}`,
                 url: `/chat/${chat.id}`,
               });
             }

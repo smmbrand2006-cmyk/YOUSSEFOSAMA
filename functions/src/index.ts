@@ -71,15 +71,20 @@ export const onNewMessage = onDocumentCreated(
 
     await Promise.all(
       recipients.map(async (uid) => {
-        // Skip if recipient has blocked sender
+        // Skip if recipient has blocked sender or disabled message notifications
         const recipientDoc = await db.doc(`users/${uid}`).get();
+        const prefs = recipientDoc.get("notificationPreferences") || {};
+        if (prefs.messages === false) return;
+
         const blockedUsers: string[] = recipientDoc.get("blockedUsers") ?? [];
         if (blockedUsers.includes(msg.senderId)) return;
+
+        const bodyText = prefs.preview === false ? "رسالة جديدة 💬" : preview(msg);
 
         await pushToUser(uid, {
           type: "message",
           title: `${senderName} 💬`,
-          body: preview(msg),
+          body: bodyText,
           icon: sender.get("photoURL") ?? "/icons/icon-192.png",
           chatId,
           url: `/chat/${chatId}`,
@@ -101,6 +106,13 @@ export const onIncomingCall = onDocumentCreated(
 
     if (!targetUid) return;
 
+    // Check receiver notification preferences
+    const receiverDoc = await db.doc(`users/${targetUid}`).get();
+    const prefs = receiverDoc.get("notificationPreferences") || {};
+    if (prefs.calls === false) return;
+
+    const callId = event.params.callId;
+
     await pushToUser(
       targetUid,
       {
@@ -108,7 +120,8 @@ export const onIncomingCall = onDocumentCreated(
         title: `${callerName} 📞`,
         body: call.type === "video" ? "📹 مكالمة فيديو واردة..." : "📞 مكالمة صوتية واردة...",
         icon: caller.get("photoURL") ?? "/icons/icon-192.png",
-        chatId: call.chatId ?? event.params.callId,
+        callId,
+        chatId: call.chatId ?? callId,
         url: `/calls`,
       },
       true

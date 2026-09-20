@@ -1,8 +1,13 @@
 "use client";
 
+export const SW_SCOPE = "/firebase-cloud-messaging-push-scope";
+
 // Web Audio API Chime Synthesizer (Zero external dependencies, always plays)
 export function playNotificationChime() {
   try {
+    if (typeof window !== "undefined" && localStorage.getItem("notif_pref_sound") === "false") {
+      return;
+    }
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
@@ -60,11 +65,25 @@ export function getNotificationStatus(): NotificationStatus {
   return Notification.permission as NotificationStatus;
 }
 
-export async function requestBrowserNotifications(): Promise<boolean> {
+export async function requestBrowserNotifications(uid?: string): Promise<boolean> {
   if (typeof window === "undefined" || !("Notification" in window)) {
     return false;
   }
   try {
+    if (uid) {
+      try {
+        const { enableNotifications } = await import("@/lib/notifications");
+        const res = await enableNotifications(uid);
+        if (res.ok) {
+          playNotificationChime();
+          return true;
+        }
+        return false;
+      } catch (e) {
+        console.warn("enableNotifications error:", e);
+      }
+    }
+
     const result = await Notification.requestPermission();
     if (result === "granted") {
       playNotificationChime();
@@ -82,7 +101,7 @@ export async function requestBrowserNotifications(): Promise<boolean> {
   }
 }
 
-// Dispatch browser notification
+// Dispatch browser notification (FCM SW registration + user preferences)
 export async function dispatchAppNotification({
   title,
   body,
@@ -99,65 +118,91 @@ export async function dispatchAppNotification({
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
 
-  const notifOptions = {
+  const isCall = Boolean(tag && tag.startsWith("call-"));
+
+  // Check user preferences
+  try {
+    if (!isCall && localStorage.getItem("notif_pref_messages") === "false") {
+      return;
+    }
+    if (isCall && localStorage.getItem("notif_pref_calls") === "false") {
+      return;
+    }
+    if (!isCall && localStorage.getItem("notif_pref_preview") === "false") {
+      body = "رسالة جديدة 💬";
+    }
+  } catch (e) {}
+
+  const vibrateEnabled = typeof window !== "undefined" ? localStorage.getItem("notif_pref_vibrate") !== "false" : true;
+
+  const notifOptions: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
     body,
     icon,
-    badge: "/icons/icon-192.png",
-    vibrate: [200, 100, 200],
+    badge: "/icons/badge-72.png",
     tag: tag || `app-notif-${Date.now()}`,
-    data: { url },
+    renotify: true,
+    vibrate: vibrateEnabled ? (isCall ? [300, 150, 300, 150, 300] : [200, 100, 200]) : undefined,
+    data: { url, chatId: tag?.replace(/^(chat|msg|call)-/, "") },
   };
 
-  let shown = false;
-
-  // 1. Try sending directly to ServiceWorker via postMessage
-  if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-    try {
-      navigator.serviceWorker.controller.postMessage({
-        type: "SHOW_NOTIFICATION",
-        title,
-        options: notifOptions,
-      });
-      shown = true;
-    } catch (e) {
-      console.warn("postMessage to SW failed:", e);
+  // 1. Show via FCM Service Worker registration directly
+  try {
+    let reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+    if (!reg) {
+      reg = await navigator.serviceWorker.getRegistration();
     }
+    if (reg && reg.showNotification) {
+      await reg.showNotification(title, notifOptions);
+      return;
+    }
+  } catch (swErr) {
+    console.warn("SW getRegistration showNotification error:", swErr);
   }
 
-  // 2. Try reg.showNotification with timeout
-  if (!shown && "serviceWorker" in navigator) {
-    try {
-      const reg = await Promise.race([
+  // 2. Secondary: If registration is pending, check ready
+  try {
+    if ("serviceWorker" in navigator) {
+      const readyReg = await Promise.race([
         navigator.serviceWorker.ready,
-        new Promise<null>((res) => setTimeout(() => res(null), 500)),
+        new Promise<null>((res) => setTimeout(() => res(null), 400)),
       ]);
-      if (reg && reg.showNotification) {
-        await reg.showNotification(title, notifOptions as any);
-        shown = true;
+      if (readyReg && readyReg.showNotification) {
+        await readyReg.showNotification(title, notifOptions);
+        return;
       }
-    } catch (swErr) {
-      console.warn("SW showNotification failed:", swErr);
     }
+  } catch (readyErr) {
+    console.warn("SW ready showNotification error:", readyErr);
   }
 
-  // 3. Fallback standard DOM notification
-  if (!shown) {
-    try {
-      new Notification(title, notifOptions as any);
-    } catch (domErr) {
-      console.warn("DOM notification failed:", domErr);
+  // 3. Fallback: Standard DOM Notification (Desktop only)
+  try {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (!isMobile && typeof Notification !== "undefined") {
+      const notif = new Notification(title, notifOptions);
+      notif.onclick = () => {
+        window.focus();
+        window.location.href = url;
+        notif.close();
+      };
     }
+  } catch (domErr) {
+    console.warn("DOM Notification fallback note:", domErr);
   }
 }
 
-export async function testSystemNotification(): Promise<boolean> {
-  const granted = await requestBrowserNotifications();
-  if (!granted) return false;
+export async function testSystemNotification(uid?: string): Promise<boolean> {
+  const status = getNotificationStatus();
+  if (status !== "granted") {
+    const granted = await requestBrowserNotifications(uid);
+    if (!granted) return false;
+  }
   playNotificationChime();
   await dispatchAppNotification({
     title: "إشعار تجريبي من Youssef App 🚀",
     body: "تهانينا! الإشعارات تعمل بنجاح وستصلك كافة الرسائل والمكالمات في الوقت الفعلي.",
     url: "/chat",
+    tag: `chat-test-${Date.now()}`,
   });
   return true;
 }

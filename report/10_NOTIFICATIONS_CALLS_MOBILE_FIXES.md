@@ -278,9 +278,14 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 ```typescript
 "use client";
 
-// Web Audio API Chime Synthesizer (توليد نغمة تنبيه نقية D5 -> A5 بدون ملفات خارجية)
+export const SW_SCOPE = "/firebase-cloud-messaging-push-scope";
+
+// Web Audio API Chime Synthesizer (توليد نغمة تنبيه نقية D5 -> A5 باحترام كتم الصوت)
 export function playNotificationChime() {
   try {
+    if (typeof window !== "undefined" && localStorage.getItem("notif_pref_sound") === "false") {
+      return;
+    }
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
@@ -323,11 +328,25 @@ export function getNotificationStatus(): NotificationStatus {
   return Notification.permission as NotificationStatus;
 }
 
-export async function requestBrowserNotifications(): Promise<boolean> {
+export async function requestBrowserNotifications(uid?: string): Promise<boolean> {
   if (typeof window === "undefined" || !("Notification" in window)) {
     return false;
   }
   try {
+    if (uid) {
+      try {
+        const { enableNotifications } = await import("@/lib/notifications");
+        const res = await enableNotifications(uid);
+        if (res.ok) {
+          playNotificationChime();
+          return true;
+        }
+        return false;
+      } catch (e) {
+        console.warn("enableNotifications error:", e);
+      }
+    }
+
     const result = await Notification.requestPermission();
     if (result === "granted") {
       playNotificationChime();
@@ -864,14 +883,14 @@ if (hasNewMessage) {
       chat.participantNames?.[chat.lastMessage?.senderId || ""] ||
       (chat.type === "direct" ? "رسالة جديدة 💬" : (chat.name || "رسالة جديدة 💬"));
     
-    // تشغيل نغمة الصوت
+    // تشغيل نغمة الصوت (مع فحص التفضيل)
     playNotificationChime();
 
-    // إرسال الإشعار لمركز إشعارات النظام
+    // إرسال الإشعار لمركز إشعارات النظام بتطابق الـ tag
     dispatchAppNotification({
       title: `${senderName} 💬`,
       body: chat.lastMessage?.text || "أرسل لك رسالة جديدة",
-      tag: `msg-${chat.id}`,
+      tag: `chat-${chat.id}`,
       url: `/chat/${chat.id}`,
     });
   }
@@ -896,3 +915,177 @@ const unsub = listenForIncomingCalls(userProfile.uid, (call) => {
   }
 });
 ```
+
+---
+
+## 7. 🛡️ المعالجة الجذرية للثغرات الدقيقة (Backend Push & Silent Failure Fixes)
+
+بناءً على الفحص المعماري الدقيق لبيئة تشغيل PWA وسيرفيس وركر الخلفية على الهواتف، تم تطبيق التحسينات الهندسية التالية:
+
+### 1) حل الفشل الصامت في `dispatchAppNotification`:
+- **سبب المشكلة السابقة:** كانت الدالة ترسل `postMessage` لـ `navigator.serviceWorker.controller`. لكن سيرفيس وركر FCM مسجل على نطاق مخصص (`/firebase-cloud-messaging-push-scope`)، مما يجعله ليس الـ controller للمجال العام. وكان الاستدعاء يرجع مبكراً قبل الوصول للـ fallback. كما أن الـ fallback باستخدام `new Notification()` يرمي خطأ `TypeError: Illegal constructor` على نظام أندرويد وChrome للموبايل.
+- **الحل الجذري:** 
+  1. الاستعلام المباشر عن تسجيل الـ SW بنطاق FCM المخصص عبر `navigator.serviceWorker.getRegistration(SW_SCOPE)` ثم `reg.showNotification(title, notifOptions)`.
+  2. إضافة مستمع لرسائل `message` داخل `public/firebase-messaging-sw.js` لدعم `SHOW_NOTIFICATION`.
+  3. حصر استدعاء `new Notification()` للديسكتوب فقط وحمايته بـ try/catch لمنع انهيار التطبيق على الهواتف.
+
+### 2) القضاء على الإشعارات المكررة بتوحيد الـ Tags:
+- تم توحيد وسوم الإشعار بين الواجهة الأمامية، السيرفيس وركر، والـ Cloud Function:
+  - للرسائل: `chat-${chatId}` (استبدال `msg-${chat.id}`)
+  - للمكالمات: `call-${callId}`
+- هذا يضمن أنه حتى لو استقبل الهاتف إشعار الدفع السحابي (Push) وتزامن معه استماع Firestore المحلي في نفس اللحظة، سيقوم نظام التشغيل باستبدال الإشعار بنفس التاج تلقائياً دون أي تكرار مزعج.
+
+### 3) حفظ تفضيلات الإشعارات في السيرفر وقراءتها في الـ Cloud Function:
+- تم ربط مفاتيح التبديل في [`NotificationSettingsModal.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/chat/NotificationSettingsModal.tsx) لتقوم بتحديث وثيقة المستخدم `users/{uid}` بالحقل `notificationPreferences`، بالإضافة إلى `localStorage`.
+- تم تحديث دوال `playNotificationChime` و `dispatchAppNotification` لاحترام إعدادات كتم الصوت أو حظر الرسائل أو المعاينة محلياً.
+- تقوم الـ Cloud Function في السيرفر بقراءة `notificationPreferences`:
+  - إذا عطل المستخدم تنبيهات الرسائل (`messages: false`)، يتم تخطي الإرسال سحابياً.
+  - إذا عطل المعاينة (`preview: false`)، يتم إرسال النص العام المجهل "رسالة جديدة 💬" بدلاً من نص الرسالة.
+  - إذا عطل المكالمات (`calls: false`)، يتم تخطي رنين المكالمات السحابي.
+
+### 4) ربط التسجيل الفعلي لـ FCM في نافذة التشغيل الإلزامية:
+- تم ربط [`MandatoryNotificationModal.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/pwa/MandatoryNotificationModal.tsx) بدالة `enableNotifications(userProfile.uid)` لضمان تسجيل وحفظ توكن FCM في قاعدة بيانات Firestore فور موافقة المستخدم وليس مجرد أخذ إذن المتصفح العادي.
+
+---
+
+## 8. ☁️ كود الـ Cloud Functions لإرسال الإشعارات عند إغلاق التطبيق
+
+لكي تصل الإشعارات والمكالمات في الخلفية حتى عندما يكون التطبيق مقفولاً تماماً أو الهاتف في وضع السكون، تم إعداد الـ Cloud Functions التالية:
+
+**الملف:** [`functions/src/index.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/functions/src/index.ts)
+```typescript
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
+
+initializeApp();
+const db = getFirestore();
+const REGION = "europe-west1";
+
+const DEAD = [
+  "messaging/registration-token-not-registered",
+  "messaging/invalid-registration-token",
+];
+
+async function pushToUser(uid: string, data: Record<string, string>, urgent = false) {
+  const tokensSnap = await db.collection(`users/${uid}/fcmTokens`).get();
+  const tokens = tokensSnap.docs.map((d) => d.id);
+  if (!tokens.length) return;
+
+  const res = await getMessaging().sendEachForMulticast({
+    tokens,
+    data, // data-only: all values MUST be strings
+    webpush: { headers: { Urgency: urgent ? "high" : "normal", TTL: urgent ? "60" : "86400" } },
+  });
+
+  // Clean up tokens of uninstalled/expired devices
+  const dead: string[] = [];
+  res.responses.forEach((r, i) => {
+    if (!r.success && DEAD.includes(r.error?.code || "")) dead.push(tokens[i]);
+  });
+  await Promise.all(dead.map((t) => db.doc(`users/${uid}/fcmTokens/${t}`).delete()));
+}
+
+function preview(msg: FirebaseFirestore.DocumentData): string {
+  switch (msg.type) {
+    case "image": return "📷 صورة";
+    case "video": return "🎥 فيديو";
+    case "audio": return "🎤 رسالة صوتية";
+    case "file":  return "📎 ملف";
+    default: {
+      const t = String(msg.text ?? "");
+      if (t.startsWith("🔒#YF:")) return "🔒 رسالة جديدة";
+      return t.length > 120 ? t.slice(0, 117) + "…" : t;
+    }
+  }
+}
+
+export const onNewMessage = onDocumentCreated(
+  { document: "chats/{chatId}/messages/{messageId}", region: REGION },
+  async (event) => {
+    const msg = event.data?.data();
+    if (!msg) return;
+    const { chatId } = event.params;
+
+    const chat = await db.doc(`chats/${chatId}`).get();
+    const participants: string[] = chat.get("participants") ?? [];
+    const recipients = participants.filter((u) => u !== msg.senderId);
+    if (!recipients.length) return;
+
+    const sender = await db.doc(`users/${msg.senderId}`).get();
+    const senderName = sender.get("displayName") ?? msg.senderName ?? "رسالة جديدة";
+
+    await Promise.all(
+      recipients.map(async (uid) => {
+        // Skip if recipient has blocked sender or disabled message notifications
+        const recipientDoc = await db.doc(`users/${uid}`).get();
+        const prefs = recipientDoc.get("notificationPreferences") || {};
+        if (prefs.messages === false) return;
+
+        const blockedUsers: string[] = recipientDoc.get("blockedUsers") ?? [];
+        if (blockedUsers.includes(msg.senderId)) return;
+
+        const bodyText = prefs.preview === false ? "رسالة جديدة 💬" : preview(msg);
+
+        await pushToUser(uid, {
+          type: "message",
+          title: `${senderName} 💬`,
+          body: bodyText,
+          icon: sender.get("photoURL") ?? "/icons/icon-192.png",
+          chatId,
+          url: `/chat/${chatId}`,
+        });
+      })
+    );
+  }
+);
+
+export const onIncomingCall = onDocumentCreated(
+  { document: "calls/{callId}", region: REGION },
+  async (event) => {
+    const call = event.data?.data();
+    if (!call || call.status !== "ringing") return;
+
+    const caller = await db.doc(`users/${call.callerId}`).get();
+    const callerName = caller.get("displayName") ?? call.callerName ?? "مكالمة واردة";
+    const targetUid = call.receiverId || call.calleeId;
+
+    if (!targetUid) return;
+
+    // Check receiver notification preferences
+    const receiverDoc = await db.doc(`users/${targetUid}`).get();
+    const prefs = receiverDoc.get("notificationPreferences") || {};
+    if (prefs.calls === false) return;
+
+    const callId = event.params.callId;
+
+    await pushToUser(
+      targetUid,
+      {
+        type: "call",
+        title: `${callerName} 📞`,
+        body: call.type === "video" ? "📹 مكالمة فيديو واردة..." : "📞 مكالمة صوتية واردة...",
+        icon: caller.get("photoURL") ?? "/icons/icon-192.png",
+        callId,
+        chatId: call.chatId ?? callId,
+        url: `/calls`,
+      },
+      true
+    );
+  }
+);
+```
+
+### خطوات تفعيل الإشعارات السحابية في بيئة الإنتاج:
+1. **نشر الدوال:**
+   ```bash
+   firebase deploy --only functions
+   ```
+   *(يتطلب ترقية مشروع Firebase لخطة Blaze المجانية حتى حدود الاستخدام).*
+2. **شهادة Web Push (VAPID Key):**
+   - استخراج المفتاح العام من: Firebase Console ← Project Settings ← Cloud Messaging ← Web Push certificates.
+   - وضعه في ملف `.env.local` كـ `NEXT_PUBLIC_FIREBASE_VAPID_KEY=...` وفي إعدادات متغيرات البيئة في Cloudflare Pages قبل بناء المشروع.
+3. **التشغيل على iOS:**
+   - تتطلب هواتف iPhone إصدار iOS 16.4 أو أحدث، وأن يقوم المستخدم بإضافة التطبيق للشاشة الرئيسية عبر "Add to Home Screen".
+

@@ -25,12 +25,12 @@ messaging.onBackgroundMessage((payload) => {
     body: d.body || "",
     icon: d.icon || "/icons/icon-192.png",
     badge: "/icons/badge-72.png", // small monochrome icon (Android/Chrome)
-    tag: isCall ? `call-${d.chatId}` : `chat-${d.chatId}`, // one notification per chat
+    tag: isCall ? (d.callId ? `call-${d.callId}` : `call-${d.chatId}`) : `chat-${d.chatId}`, // unique per chat or call
     renotify: true, // still alert on new message in same chat
     requireInteraction: isCall, // calls stay until user acts
     vibrate: isCall ? [300, 150, 300, 150, 300] : [120],
     dir: "auto",
-    data: { url: d.url || "/", chatId: d.chatId, type: d.type || "message" },
+    data: { url: d.url || "/", chatId: d.chatId, callId: d.callId, type: d.type || "message" },
     actions: isCall
       ? [
           { action: "answer", title: "رد" },
@@ -38,6 +38,15 @@ messaging.onBackgroundMessage((payload) => {
         ]
       : [],
   });
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SHOW_NOTIFICATION") {
+    const { title, options } = event.data;
+    if (self.registration && self.registration.showNotification) {
+      self.registration.showNotification(title || "Youssef App", options || {});
+    }
+  }
 });
 
 self.addEventListener("notificationclick", (event) => {

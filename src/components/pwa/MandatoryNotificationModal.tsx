@@ -17,8 +17,10 @@ import {
   AlertTriangle,
   Send,
 } from "lucide-react";
+import { useAuth } from "@/lib/contexts/AuthContext";
 
 export default function MandatoryNotificationModal() {
+  const { userProfile } = useAuth();
   const [status, setStatus] = useState<NotificationStatus>("granted");
   const [micGranted, setMicGranted] = useState(false);
   const [camGranted, setCamGranted] = useState(false);
@@ -52,8 +54,8 @@ export default function MandatoryNotificationModal() {
   const handleRequestAll = async () => {
     setLoading(true);
     try {
-      // 1. Request Notifications first with dedicated gesture
-      const notifResult = await requestBrowserNotifications();
+      // 1. Request Notifications first with dedicated gesture and register FCM token
+      const notifResult = await requestBrowserNotifications(userProfile?.uid);
 
       // 2. Request Microphone sequentially (not concurrent, so mobile browsers don't auto-dismiss)
       try {
@@ -83,7 +85,7 @@ export default function MandatoryNotificationModal() {
   const handleTestNotification = async () => {
     setIsTestingNotif(true);
     try {
-      await testSystemNotification();
+      await testSystemNotification(userProfile?.uid);
     } finally {
       setIsTestingNotif(false);
     }

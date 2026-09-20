@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { enableNotifications, disableNotifications, refreshToken } from "@/lib/notifications";
 import { testSystemNotification, playNotificationChime } from "@/lib/utils/pwaNotifications";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
 import styles from "@/styles/chat.module.css";
 
 interface NotificationSettingsModalProps {
@@ -37,7 +39,7 @@ export default function NotificationSettingsModal({
   const [testing, setTesting] = useState(false);
   const [testSuccess, setTestSuccess] = useState(false);
 
-  // Settings State (stored in localStorage)
+  // Settings State (stored in localStorage & Firestore)
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [messagesEnabled, setMessagesEnabled] = useState(true);
   const [callsEnabled, setCallsEnabled] = useState(true);
@@ -54,7 +56,7 @@ export default function NotificationSettingsModal({
       setPermission("unsupported");
     }
 
-    // Load saved preferences
+    // Load saved preferences from localStorage first
     try {
       setSoundEnabled(localStorage.getItem("notif_pref_sound") !== "false");
       setMessagesEnabled(localStorage.getItem("notif_pref_messages") !== "false");
@@ -62,11 +64,44 @@ export default function NotificationSettingsModal({
       setPreviewEnabled(localStorage.getItem("notif_pref_preview") !== "false");
       setVibrateEnabled(localStorage.getItem("notif_pref_vibrate") !== "false");
     } catch (e) {}
-  }, [isOpen]);
+
+    // Also sync from Firestore user profile if available
+    if (uid) {
+      getDoc(doc(db, "users", uid))
+        .then((snap) => {
+          if (snap.exists()) {
+            const prefs = snap.data()?.notificationPreferences;
+            if (prefs) {
+              if (typeof prefs.sound === "boolean") {
+                setSoundEnabled(prefs.sound);
+                localStorage.setItem("notif_pref_sound", String(prefs.sound));
+              }
+              if (typeof prefs.messages === "boolean") {
+                setMessagesEnabled(prefs.messages);
+                localStorage.setItem("notif_pref_messages", String(prefs.messages));
+              }
+              if (typeof prefs.calls === "boolean") {
+                setCallsEnabled(prefs.calls);
+                localStorage.setItem("notif_pref_calls", String(prefs.calls));
+              }
+              if (typeof prefs.preview === "boolean") {
+                setPreviewEnabled(prefs.preview);
+                localStorage.setItem("notif_pref_preview", String(prefs.preview));
+              }
+              if (typeof prefs.vibrate === "boolean") {
+                setVibrateEnabled(prefs.vibrate);
+                localStorage.setItem("notif_pref_vibrate", String(prefs.vibrate));
+              }
+            }
+          }
+        })
+        .catch((e) => console.warn("Sync prefs from Firestore note:", e));
+    }
+  }, [isOpen, uid]);
 
   if (!isOpen) return null;
 
-  const handleTogglePreference = (key: string, current: boolean, setter: (val: boolean) => void) => {
+  const handleTogglePreference = async (key: string, current: boolean, setter: (val: boolean) => void) => {
     const next = !current;
     setter(next);
     try {
@@ -74,6 +109,17 @@ export default function NotificationSettingsModal({
     } catch (e) {}
     if (key === "sound" && next) {
       playNotificationChime();
+    }
+
+    // Save to Firestore so Cloud Functions know user preferences
+    if (uid) {
+      try {
+        await updateDoc(doc(db, "users", uid), {
+          [`notificationPreferences.${key}`]: next,
+        });
+      } catch (err) {
+        console.warn("Syncing notification preferences to Firestore failed:", err);
+      }
     }
   };
 
@@ -109,7 +155,7 @@ export default function NotificationSettingsModal({
     setTestSuccess(false);
     try {
       playNotificationChime();
-      const ok = await testSystemNotification();
+      const ok = await testSystemNotification(uid);
       if (ok) {
         setTestSuccess(true);
         setTimeout(() => setTestSuccess(false), 3000);
