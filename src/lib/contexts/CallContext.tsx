@@ -28,6 +28,7 @@ interface CallContextType {
   isCallActive: boolean;
   isMuted: boolean;
   isCameraOff: boolean;
+  isRealMic: boolean;
   callType: "audio" | "video" | null;
   callDuration: number;
   callStatus: "idle" | "ringing" | "connected";
@@ -53,6 +54,7 @@ const CallContext = createContext<CallContextType>({
   isCallActive: false,
   isMuted: false,
   isCameraOff: false,
+  isRealMic: true,
   callType: null,
   callDuration: 0,
   callStatus: "idle",
@@ -77,6 +79,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [isCallActive, setIsCallActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
+  const [isRealMic, setIsRealMic] = useState(true);
   const [callType, setCallType] = useState<"audio" | "video" | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const [callStatus, setCallStatus] = useState<"idle" | "ringing" | "connected">("idle");
@@ -156,19 +159,16 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         receiverId,
         receiverName,
         receiverPhoto || "",
-        type
+        type,
+        (stream) => {
+          setRemoteStream(stream);
+        }
       );
 
       peerConnectionRef.current = peerConnection;
       setLocalStream(ls);
+      setIsRealMic(ls.isRealMic !== false);
       setActiveCallId(callId);
-
-      // Listen for remote audio/video tracks
-      peerConnection.ontrack = (event) => {
-        if (event.streams && event.streams[0]) {
-          setRemoteStream(event.streams[0]);
-        }
-      };
     } catch (err) {
       console.error("Failed to initiate call:", err);
       hangUp();
@@ -185,24 +185,21 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         photo: incomingCall.callerPhoto,
       });
       const { peerConnection, localStream: ls } = await answerCall(
-        incomingCall.id
+        incomingCall.id,
+        (stream) => {
+          setRemoteStream(stream);
+        }
       );
 
       peerConnectionRef.current = peerConnection;
       setLocalStream(ls);
+      setIsRealMic(ls.isRealMic !== false);
       setActiveCallId(incomingCall.id);
       setCallType(incomingCall.type);
       setCallStatus("connected");
       setIsCallActive(true);
       setIncomingCall(null);
       setCallDuration(0);
-
-      // Listen for remote audio/video tracks
-      peerConnection.ontrack = (event) => {
-        if (event.streams && event.streams[0]) {
-          setRemoteStream(event.streams[0]);
-        }
-      };
 
       // Start duration timer for callee
       if (!durationIntervalRef.current) {
@@ -256,6 +253,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setOtherUser(null);
     setIsMuted(false);
     setIsCameraOff(false);
+    setIsRealMic(true);
     setCallType(null);
     setCallDuration(0);
   };
@@ -288,6 +286,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         isCallActive,
         isMuted,
         isCameraOff,
+        isRealMic,
         callType,
         callDuration,
         callStatus,

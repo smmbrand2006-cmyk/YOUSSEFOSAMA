@@ -35,6 +35,9 @@
 9. **[09_STORIES_PWA_PERMISSIONS_NOTIFICATIONS.md](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/report/09_STORIES_PWA_PERMISSIONS_NOTIFICATIONS.md)**
    - التحديثات الشاملة: نظام الاستوري وتتبع المشاهدات، إرسال الصور والفويس، تثبيت تطبيق PWA، الأذونات الكاملة قبل التنزيل، حل مشكلة اللمس في جوجل، ومحرك الإشعارات والخصوصية.
 
+10. **[10_NOTIFICATIONS_CALLS_MOBILE_FIXES.md](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/report/10_NOTIFICATIONS_CALLS_MOBILE_FIXES.md)**
+    - إعدادات الإشعارات والتنبيهات الشاملة، إصلاح ارتداد الشات لأسفل عند الإرسال، معالجة أذونات الميكروفون على الموبايل، ضمانات جودة وتزامن الصوت في المكالمات (WebRTC)، وضبط أبعاد وتنسيق شاشات الهواتف الصغيرة مع الفونت الهندسي الرسمي (YOUSSEF APP).
+
 ---
 
 تم إعداد هذا التقرير ليكون مرجعاً تقنياً وهندسياً متكاملاً لأي مطور أو مستخدم يريد فهم كل سطر برمجي في المشروع! 🌟

@@ -30,7 +30,7 @@ const ICE_SERVERS: RTCConfiguration = {
  * Safe getUserMedia with multi-tier fallback for emulators and cross-device calling
  * (Handles missing webcam, missing mic in emulators, overconstrained devices, etc.)
  */
-async function getSafeUserMedia(type: "audio" | "video"): Promise<MediaStream> {
+async function getSafeUserMedia(type: "audio" | "video"): Promise<MediaStream & { isRealMic?: boolean }> {
   const audioConstraints: MediaTrackConstraints = {
     echoCancellation: true,
     noiseSuppression: true,
@@ -40,17 +40,21 @@ async function getSafeUserMedia(type: "audio" | "video"): Promise<MediaStream> {
   // 1. If video requested, attempt user-facing video first
   if (type === "video") {
     try {
-      return await navigator.mediaDevices.getUserMedia({
+      const s = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-      });
+      }) as MediaStream & { isRealMic?: boolean };
+      s.isRealMic = true;
+      return s;
     } catch (vErr1) {
       console.warn("User-facing video failed, trying simple video:", vErr1);
       try {
-        return await navigator.mediaDevices.getUserMedia({
+        const s = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: true,
-        });
+        }) as MediaStream & { isRealMic?: boolean };
+        s.isRealMic = true;
+        return s;
       } catch (vErr2) {
         console.warn("Video failed completely on this device/emulator. Falling back to audio only:", vErr2);
       }
@@ -59,17 +63,21 @@ async function getSafeUserMedia(type: "audio" | "video"): Promise<MediaStream> {
 
   // 2. Try optimized audio
   try {
-    return await navigator.mediaDevices.getUserMedia({
+    const s = await navigator.mediaDevices.getUserMedia({
       audio: audioConstraints,
       video: false,
-    });
+    }) as MediaStream & { isRealMic?: boolean };
+    s.isRealMic = true;
+    return s;
   } catch (aErr1) {
     console.warn("Optimized audio constraints failed, trying basic audio:", aErr1);
     try {
-      return await navigator.mediaDevices.getUserMedia({
+      const s = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: false,
-      });
+      }) as MediaStream & { isRealMic?: boolean };
+      s.isRealMic = true;
+      return s;
     } catch (aErr2) {
       console.warn(
         "No microphone detected (common in Android emulators or PCs without input device). Creating virtual silent audio track to enable connection:",
@@ -88,12 +96,14 @@ async function getSafeUserMedia(type: "audio" | "video"): Promise<MediaStream> {
           osc.connect(gain);
           gain.connect(dst);
           osc.start();
-          return dst.stream;
+          const s = dst.stream as MediaStream & { isRealMic?: boolean };
+          s.isRealMic = false;
+          return s;
         }
       } catch (ctxErr) {
         console.error("Failed to create fallback audio stream:", ctxErr);
       }
-      throw new Error("تعذر الوصول لأي جهاز صوت أو ميكروفون. يرجى تفعيل الصوت في المحاكي.");
+      throw new Error("تعذر الوصول لأي جهاز صوت أو ميكروفون. يرجى تفعيل إذن الميكروفون.");
     }
   }
 }
@@ -108,11 +118,12 @@ export async function createCall(
   receiverId: string,
   receiverName: string,
   receiverPhoto: string = "",
-  type: "audio" | "video"
+  type: "audio" | "video",
+  onRemoteStream?: (stream: MediaStream) => void
 ): Promise<{
   callId: string;
   peerConnection: RTCPeerConnection;
-  localStream: MediaStream;
+  localStream: MediaStream & { isRealMic?: boolean };
 }> {
   // 1. Get local media stream (safe for emulators and phones)
   const localStream = await getSafeUserMedia(type);
@@ -120,12 +131,23 @@ export async function createCall(
   // 2. Create peer connection
   const peerConnection = new RTCPeerConnection(ICE_SERVERS);
 
-  // 3. Add tracks to peer connection
+  // 3. Hook remote track listener immediately so tracks are never dropped
+  peerConnection.ontrack = (event) => {
+    if (event.streams && event.streams[0]) {
+      onRemoteStream?.(event.streams[0]);
+    } else if (event.track) {
+      const s = new MediaStream([event.track]);
+      onRemoteStream?.(s);
+    }
+  };
+
+  // 4. Add tracks to peer connection with explicit enabled state
   localStream.getTracks().forEach((track) => {
+    track.enabled = true;
     peerConnection.addTrack(track, localStream);
   });
 
-  // 4. Create call document in Firestore
+  // 5. Create call document in Firestore
   const callDoc = doc(collection(db, "calls"));
   const callId = callDoc.id;
 
@@ -238,10 +260,11 @@ export async function createCall(
  * Answer a call (callee side)
  */
 export async function answerCall(
-  callId: string
+  callId: string,
+  onRemoteStream?: (stream: MediaStream) => void
 ): Promise<{
   peerConnection: RTCPeerConnection;
-  localStream: MediaStream;
+  localStream: MediaStream & { isRealMic?: boolean };
 }> {
   const callDoc = doc(db, "calls", callId);
   const callSnap = await getDoc(callDoc);
@@ -253,8 +276,19 @@ export async function answerCall(
   // 2. Create peer connection
   const peerConnection = new RTCPeerConnection(ICE_SERVERS);
 
-  // 3. Add tracks
+  // 3. Hook remote track listener immediately so tracks arriving with offer are captured
+  peerConnection.ontrack = (event) => {
+    if (event.streams && event.streams[0]) {
+      onRemoteStream?.(event.streams[0]);
+    } else if (event.track) {
+      const s = new MediaStream([event.track]);
+      onRemoteStream?.(s);
+    }
+  };
+
+  // 4. Add tracks with explicit enabled state
   localStream.getTracks().forEach((track) => {
+    track.enabled = true;
     peerConnection.addTrack(track, localStream);
   });
 

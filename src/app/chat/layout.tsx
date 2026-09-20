@@ -93,8 +93,8 @@ export default function ChatLayout({
           onOpenProfile={() => setShowMyProfile(true)}
         />
 
-        {/* FCM Push Notification Prompt (when not granted/denied) */}
-        {userProfile && <NotificationPrompt uid={userProfile.uid} />}
+        {/* FCM Push Notification Prompt (when not granted/denied and not inside open conversation) */}
+        {userProfile && !activeChat && <NotificationPrompt uid={userProfile.uid} />}
 
         {/* 3. Main Workstation Body: Left Sidebar (46%) + Main Conversation Panel */}
         <div className={styles.appContentArea}>

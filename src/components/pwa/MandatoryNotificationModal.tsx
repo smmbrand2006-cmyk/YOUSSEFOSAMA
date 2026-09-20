@@ -52,29 +52,20 @@ export default function MandatoryNotificationModal() {
   const handleRequestAll = async () => {
     setLoading(true);
     try {
-      // 1. Request Notifications
+      // 1. Request Notifications first with dedicated gesture
       const notifResult = await requestBrowserNotifications();
 
-      // 2. Request Microphone
+      // 2. Request Microphone sequentially (not concurrent, so mobile browsers don't auto-dismiss)
       try {
-        if (navigator.mediaDevices?.getUserMedia) {
-          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const audioStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true },
+          });
           audioStream.getTracks().forEach((t) => t.stop());
           setMicGranted(true);
         }
       } catch (err) {
         console.warn("Microphone permission note:", err);
-      }
-
-      // 3. Request Camera
-      try {
-        if (navigator.mediaDevices?.getUserMedia) {
-          const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-          videoStream.getTracks().forEach((t) => t.stop());
-          setCamGranted(true);
-        }
-      } catch (err) {
-        console.warn("Camera permission note:", err);
       }
 
       const notifNow = getNotificationStatus();

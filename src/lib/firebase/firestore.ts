@@ -248,6 +248,64 @@ export function listenToFriendRequests(
 // ==================== CHAT OPERATIONS ====================
 
 /**
+ * Helper to get the most recent activity timestamp for a chat reliably,
+ * handling pending optimistic serverTimestamps without dropping to 0.
+ */
+export function getChatLastActivityTime(chat: Chat): number {
+  const lm = chat.lastMessage;
+  if (lm) {
+    if (typeof (lm as any).clientTimestamp === "number") {
+      return (lm as any).clientTimestamp;
+    }
+    const lmCreated = lm.createdAt as any;
+    if (lmCreated?.toMillis && typeof lmCreated.toMillis === "function") {
+      return lmCreated.toMillis();
+    }
+    if (typeof lmCreated?.seconds === "number") {
+      return lmCreated.seconds * 1000;
+    }
+    if (lmCreated instanceof Date) {
+      return lmCreated.getTime();
+    }
+    if (typeof lmCreated === "number") {
+      return lmCreated;
+    }
+    // If lastMessage exists but timestamp is pending or null in local optimistic write, it was just created!
+    return Date.now();
+  }
+
+  const updated = chat.updatedAt as any;
+  if (updated?.toMillis && typeof updated.toMillis === "function") {
+    return updated.toMillis();
+  }
+  if (typeof updated?.seconds === "number") {
+    return updated.seconds * 1000;
+  }
+  if (updated instanceof Date) {
+    return updated.getTime();
+  }
+  if (typeof updated === "number") {
+    return updated;
+  }
+
+  const created = chat.createdAt as any;
+  if (created?.toMillis && typeof created.toMillis === "function") {
+    return created.toMillis();
+  }
+  if (typeof created?.seconds === "number") {
+    return created.seconds * 1000;
+  }
+  if (created instanceof Date) {
+    return created.getTime();
+  }
+  if (typeof created === "number") {
+    return created;
+  }
+
+  return 0;
+}
+
+/**
  * Listen to user's chat list (Zero-index required)
  */
 export function listenToChats(
@@ -265,7 +323,7 @@ export function listenToChats(
     (snapshot) => {
       const chatsList: Chat[] = [];
       snapshot.forEach((d) => {
-        const chatData = { id: d.id, ...d.data() } as Chat;
+        const chatData = { id: d.id, ...d.data({ serverTimestamps: "estimate" }) } as Chat;
         if (chatData.lastMessage?.text) {
           chatData.lastMessage.text = decryptMessageText(chatData.lastMessage.text);
         }
@@ -276,14 +334,8 @@ export function listenToChats(
         const aPinned = a.isPinned?.[uid] ? 1 : 0;
         const bPinned = b.isPinned?.[uid] ? 1 : 0;
         if (aPinned !== bPinned) return bPinned - aPinned;
-        const aTime =
-          (a.lastMessage?.createdAt as any)?.toMillis?.() ||
-          (a.createdAt as any)?.toMillis?.() ||
-          0;
-        const bTime =
-          (b.lastMessage?.createdAt as any)?.toMillis?.() ||
-          (b.createdAt as any)?.toMillis?.() ||
-          0;
+        const aTime = getChatLastActivityTime(a);
+        const bTime = getChatLastActivityTime(b);
         return bTime - aTime;
       });
       callback(chatsList);
@@ -396,6 +448,7 @@ export async function sendMessage(
       senderId,
       type: extra.type || "text",
       createdAt: serverTimestamp(),
+      clientTimestamp: now,
     },
     updatedAt: serverTimestamp(),
   }).catch((e) => console.warn("Failed to update chat lastMessage:", e));

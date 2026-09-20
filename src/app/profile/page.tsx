@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { testSystemNotification } from "@/lib/utils/pwaNotifications";
 import { useBackHandler } from "@/lib/contexts/BackHandlerContext";
+import NotificationSettingsModal from "@/components/chat/NotificationSettingsModal";
 import styles from "@/styles/auth.module.css";
 
 export default function ProfilePage() {
@@ -32,6 +33,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [openingSupport, setOpeningSupport] = useState(false);
+  const [showNotifSettings, setShowNotifSettings] = useState(false);
 
   // Back Navigation Handlers for Profile Page
   useBackHandler(editing, () => setEditing(false), "profile_editing", 15);
@@ -303,14 +305,9 @@ export default function ProfilePage() {
 
       {/* Actions */}
       <div style={{ padding: "0 20px 30px", marginTop: "auto" }}>
-        {/* زر تجربة الإشعار الفوري */}
+        {/* زر إعدادات الإشعارات والتنبيهات الشاملة */}
         <button
-          onClick={async () => {
-            const success = await testSystemNotification();
-            if (!success) {
-              alert("يرجى تفعيل إذن الإشعارات من إعدادات المتصفح أولاً 🔒");
-            }
-          }}
+          onClick={() => setShowNotifSettings(true)}
           style={{
             width: "100%",
             display: "flex",
@@ -330,7 +327,7 @@ export default function ProfilePage() {
           }}
         >
           <Bell size={18} />
-          تجربة إشعار فوري على هاتفك الآن 🔔
+          إعدادات الإشعارات والتنبيهات الشاملة 🔔
         </button>
 
         {/* زر الدعم الفني (#123) */}
@@ -381,6 +378,14 @@ export default function ProfilePage() {
           تسجيل الخروج
         </button>
       </div>
+
+      {userProfile && (
+        <NotificationSettingsModal
+          isOpen={showNotifSettings}
+          onClose={() => setShowNotifSettings(false)}
+          uid={userProfile.uid}
+        />
+      )}
     </div>
   );
 }

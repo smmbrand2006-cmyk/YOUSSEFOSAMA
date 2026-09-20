@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { getDeferredPrompt, promptPWAInstall, isAppInstalledPWA } from "@/lib/utils/pwaNotifications";
 import Image from "next/image";
+import NotificationSettingsModal from "@/components/chat/NotificationSettingsModal";
 import styles from "@/styles/chat.module.css";
 
 interface AppHeaderProps {
@@ -20,6 +21,7 @@ export default function AppHeader({
   const { userProfile } = useAuth();
   const [notifSound, setNotifSound] = useState(true);
   const [canInstall, setCanInstall] = useState(false);
+  const [showNotifModal, setShowNotifModal] = useState(false);
 
   useEffect(() => {
     if (isAppInstalledPWA()) return;
@@ -37,11 +39,12 @@ export default function AppHeader({
   }, []);
 
   const handleToggleNotifications = () => {
-    setNotifSound((prev) => !prev);
+    setShowNotifModal(true);
   };
 
   return (
-    <header className={styles.appHeader}>
+    <>
+      <header className={styles.appHeader}>
       {/* Brand Title with Official Logo */}
       <div
         className={styles.appHeaderLeft}
@@ -129,5 +132,14 @@ export default function AppHeader({
         </div>
       </div>
     </header>
+
+    {userProfile && (
+      <NotificationSettingsModal
+        isOpen={showNotifModal}
+        onClose={() => setShowNotifModal(false)}
+        uid={userProfile.uid}
+      />
+    )}
+  </>
   );
 }

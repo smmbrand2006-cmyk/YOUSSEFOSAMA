@@ -599,7 +599,18 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } catch (firstErr) {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
       audioStreamRef.current = stream;
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -628,9 +639,17 @@ export default function ChatClient({ chatIdProp }: { chatIdProp?: string } = {})
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to start voice recording:", err);
-      alert("تعذر الوصول إلى الميكروفون. يرجى التأكد من منح الإذن في المتصفح.");
+      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+        alert(
+          "الميكروفون محظور في إعدادات المتصفح أو الهاتف.\n\nخطوات تفعيل الميكروفون على الموبايل:\n1. اضغط على رمز القفل 🔒 أو إعدادات الموقع أعلى شاشة المتصفح.\n2. اختر (الأذونات / Permissions) ثم (الميكروفون / Microphone).\n3. اختر (سماح / Allow) ثم جرب التسجيل مجدداً."
+        );
+      } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
+        alert("لم يتم العثور على ميكروفون متصل بجهازك.");
+      } else {
+        alert("تعذر الوصول إلى الميكروفون: " + (err?.message || "يرجى التحقق من إعدادات الصوت في جهازك."));
+      }
     }
   };
 

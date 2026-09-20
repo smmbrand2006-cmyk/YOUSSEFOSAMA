@@ -24,7 +24,7 @@ export default function MobileBottomNav({
   const tabs = [
     {
       id: "chats",
-      label: "Chats",
+      label: "الرسائل",
       icon: "chat",
       action: () => (onTabChange ? onTabChange("chats") : router.push("/chat")),
     },

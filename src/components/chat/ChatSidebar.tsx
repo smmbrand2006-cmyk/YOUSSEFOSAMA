@@ -19,6 +19,7 @@ import { formatMessageTime } from "@/lib/utils/formatDate";
 import UserProfileModal from "./UserProfileModal";
 import CreateGroupModal from "./CreateGroupModal";
 import SelectContactModal from "./SelectContactModal";
+import NotificationSettingsModal from "./NotificationSettingsModal";
 import { useBackHandler } from "@/lib/contexts/BackHandlerContext";
 import styles from "@/styles/chat.module.css";
 
@@ -28,6 +29,7 @@ export default function ChatSidebar() {
   const { userProfile } = useAuth();
   const { chats, activeChat, setActiveChat } = useChats();
   const router = useRouter();
+  const [showNotifModal, setShowNotifModal] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
@@ -284,7 +286,9 @@ export default function ChatSidebar() {
                 chat
               </span>
             </div>
-            <h1 className={styles.mobileHeaderTitle}>Chats</h1>
+            <h1 className={styles.mobileHeaderTitle}>
+              <span className={styles.brandTitleText}>YOUSSEF APP</span>
+            </h1>
           </div>
 
           <div className={styles.mobileHeaderRight}>
@@ -469,6 +473,22 @@ export default function ChatSidebar() {
                     className="dropdown-item"
                     onClick={() => {
                       setShowMenu(false);
+                      setShowNotifModal(true);
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "18px", color: "#f59e0b" }}
+                    >
+                      notifications
+                    </span>
+                    إعدادات الإشعارات (Notifications) 🔔
+                  </div>
+
+                  <div
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowMenu(false);
                       router.push("/profile");
                     }}
                   >
@@ -638,7 +658,9 @@ export default function ChatSidebar() {
       <div className={styles.mobileDesktopHeader}>
         {/* Desktop Top Header */}
         <div className={styles.sidebarTopHeader}>
-          <h2 className={styles.sidebarChatsTitle}>Chats</h2>
+          <h2 className={styles.sidebarChatsTitle}>
+            <span className={styles.brandTitleText}>YOUSSEF APP</span>
+          </h2>
           <div className={styles.sidebarHeaderActions}>
             <button
               type="button"
@@ -1397,6 +1419,15 @@ export default function ChatSidebar() {
           isBlocked={false}
           onToggleBlock={async () => {}}
           isSupport={userProfile.userCode === "123"}
+        />
+      )}
+
+      {/* Notification Settings Modal */}
+      {userProfile && (
+        <NotificationSettingsModal
+          isOpen={showNotifModal}
+          onClose={() => setShowNotifModal(false)}
+          uid={userProfile.uid}
         />
       )}
     </aside>
