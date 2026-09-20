@@ -175,7 +175,7 @@ export function listenForeground(getActiveChatId: () => string | null) {
         if (looking && d.type !== "call") return;
 
         const reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
-        reg?.showNotification(d.title || "Youssef App", {
+        reg?.showNotification(d.title || "YOUSSEF APP", {
           body: d.body || "",
           icon: d.icon || "/icons/icon-192.png",
           badge: "/icons/badge-72.png",
@@ -225,7 +225,7 @@ export function listenNotificationClicks(
 importScripts("https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging-compat.js");
 
-// Firebase project credentials for Youssef App (rubber-f0574)
+// Firebase project credentials for YOUSSEF APP (rubber-f0574)
 firebase.initializeApp({
   apiKey: "AIzaSyBUlsPbGCznAkncC7tZjRfDYMoTC0H_QaI",
   authDomain: "rubber-f0574.firebaseapp.com",
@@ -243,7 +243,7 @@ messaging.onBackgroundMessage((payload) => {
   const d = payload.data || {};
   const isCall = d.type === "call";
 
-  return self.registration.showNotification(d.title || "Youssef App", {
+  return self.registration.showNotification(d.title || "YOUSSEF APP", {
     body: d.body || "",
     icon: d.icon || "/icons/icon-192.png",
     badge: "/icons/badge-72.png", // small monochrome icon (Android/Chrome)
@@ -265,7 +265,7 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SHOW_NOTIFICATION") {
     const { title, options } = event.data;
     if (self.registration && self.registration.showNotification) {
-      self.registration.showNotification(title || "Youssef App", options || {});
+      self.registration.showNotification(title || "YOUSSEF APP", options || {});
     }
   }
 });
@@ -476,7 +476,7 @@ export async function testSystemNotification(uid?: string): Promise<boolean> {
   }
   playNotificationChime();
   await dispatchAppNotification({
-    title: "إشعار تجريبي من Youssef App 🚀",
+    title: "إشعار تجريبي من YOUSSEF APP 🚀",
     body: "تهانينا! الإشعارات تعمل بنجاح وستصلك كافة الرسائل والمكالمات في الوقت الفعلي.",
     url: "/chat",
     tag: `chat-test-${Date.now()}`,

@@ -11,7 +11,7 @@ import ExitConfirmModal from "@/components/pwa/ExitConfirmModal";
 import type { Viewport } from "next";
 
 export const metadata: Metadata = {
-  title: "Youssef App | يوسف شات",
+  title: "YOUSSEF APP | يوسف اب",
   description:
     "تطبيق المحادثات والمكالمات الفورية عالي الأمان والمشفر بتقنية PWA.",
   manifest: "/manifest.json",
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Youssef App",
+    title: "YOUSSEF APP",
   },
 };
 

@@ -85,7 +85,7 @@ export default function PWAInstallBanner() {
       <div className={styles.pwaAppIcon}>
         <Image
           src="/icons/icon-192.png"
-          alt="Youssef App"
+          alt="YOUSSEF APP"
           width={46}
           height={46}
           style={{ objectFit: "cover" }}
@@ -93,7 +93,7 @@ export default function PWAInstallBanner() {
       </div>
 
       <div className={styles.pwaBannerInfo}>
-        <div className={styles.pwaBannerTitle}>تثبيت Youssef App كـ تطبيق</div>
+        <div className={styles.pwaBannerTitle}>تثبيت YOUSSEF APP كـ تطبيق</div>
         <div className={styles.pwaBannerSub}>
           {isIOS
             ? "أضف للشاشة الرئيسية لتجربة تطبيق أصلي"

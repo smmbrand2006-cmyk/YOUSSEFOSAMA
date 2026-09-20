@@ -163,7 +163,7 @@ export default function RegisterPage() {
 
       <div className={styles.authRight}>
         <div className={styles.authRightContent}>
-          <h2>مرحباً بك في<br />Youssef App</h2>
+          <h2>مرحباً بك في<br />YOUSSEF APP</h2>
           <p>
             تطبيق مراسلة فوري وآمن يعتمد على كود تعريفي خاص بك مع كلمة سر، بدون الحاجة لمساحات تخزين سحابية أو تعقيدات.
           </p>

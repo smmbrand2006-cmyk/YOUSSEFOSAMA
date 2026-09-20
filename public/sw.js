@@ -1,4 +1,4 @@
-// Youssef App - Service Worker (PWA & Notifications)
+// YOUSSEF APP - Service Worker (PWA & Notifications)
 const CACHE_NAME = 'youssef-app-cache-v1';
 const STATIC_ASSETS = [
   '/',
@@ -73,11 +73,11 @@ self.addEventListener('push', (event) => {
 
   try {
     const data = event.data.json();
-    const title = data.title || 'Youssef App';
+    const title = data.title || 'YOUSSEF APP';
     const options = {
       body: data.body || 'رسالة جديدة في انتظارك',
       icon: data.icon || '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      badge: '/icons/badge-72.png',
       vibrate: [150, 50, 150, 50, 200],
       tag: data.tag || 'youssef-app-notif',
       renotify: true,
@@ -89,7 +89,7 @@ self.addEventListener('push', (event) => {
 
     event.waitUntil(self.registration.showNotification(title, options));
   } catch (err) {
-    const title = 'Youssef App';
+    const title = 'YOUSSEF APP';
     const options = {
       body: event.data.text() || 'رسالة جديدة',
       icon: '/icons/icon-192.png',
@@ -138,7 +138,7 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data;
     if (self.registration && self.registration.showNotification) {
-      self.registration.showNotification(title || 'Youssef App', options || {});
+      self.registration.showNotification(title || 'YOUSSEF APP', options || {});
     }
   }
 });

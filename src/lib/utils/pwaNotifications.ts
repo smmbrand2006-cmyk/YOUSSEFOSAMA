@@ -162,7 +162,7 @@ export async function testSystemNotification(uid?: string): Promise<boolean> {
   }
   playNotificationChime();
   await dispatchAppNotification({
-    title: "إشعار تجريبي من Youssef App 🚀",
+    title: "إشعار تجريبي من YOUSSEF APP 🚀",
     body: "تهانينا! الإشعارات تعمل بنجاح وستصلك كافة الرسائل والمكالمات في الوقت الفعلي.",
     url: "/chat",
     tag: `chat-test-${Date.now()}`,

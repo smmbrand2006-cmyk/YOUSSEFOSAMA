@@ -86,7 +86,7 @@ export function listenForeground(getActiveChatId: () => string | null) {
         if (looking && d.type !== "call") return;
 
         const reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
-        reg?.showNotification(d.title || "Youssef App", {
+        reg?.showNotification(d.title || "YOUSSEF APP", {
           body: d.body || "",
           icon: d.icon || "/icons/icon-192.png",
           badge: "/icons/badge-72.png",

@@ -1,5 +1,5 @@
 /**
- * Youssef App - End-to-End Dynamic Daily Encryption & Archiving Engine (ARC3)
+ * YOUSSEF APP - End-to-End Dynamic Daily Encryption & Archiving Engine (ARC3)
  * 
  * 1. ZERO PLAINTEXT IN DATABASE:
  *    Every message, reply quote, edit, and chat preview is transformed into an encrypted
