@@ -190,13 +190,24 @@ export function listenForeground(getActiveChatId: () => string | null) {
   return () => unsub();
 }
 
-/** Lets a notification click switch chats inside an already-open window. */
-export function listenNotificationClicks(onOpenChat: (chatId: string) => void) {
+/** Lets a notification click switch chats or open calls inside an already-open window. */
+export function listenNotificationClicks(
+  onOpenChat: (chatId: string) => void,
+  onOpenCall?: (callId?: string, url?: string) => void
+) {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return () => {};
   }
   const handler = (e: MessageEvent) => {
-    if (e.data?.type === "OPEN_CHAT" && e.data.chatId) onOpenChat(e.data.chatId);
+    if (e.data?.type === "OPEN_CHAT" && e.data.chatId) {
+      onOpenChat(e.data.chatId);
+    } else if (e.data?.type === "OPEN_CALL") {
+      if (onOpenCall) {
+        onOpenCall(e.data.callId, e.data.url);
+      } else if (e.data?.url) {
+        window.location.href = e.data.url;
+      }
+    }
   };
   navigator.serviceWorker.addEventListener("message", handler);
   return () => navigator.serviceWorker.removeEventListener("message", handler);
@@ -244,8 +255,7 @@ messaging.onBackgroundMessage((payload) => {
     data: { url: d.url || "/", chatId: d.chatId, callId: d.callId, type: d.type || "message" },
     actions: isCall
       ? [
-          { action: "answer", title: "رد" },
-          { action: "decline", title: "رفض" },
+          { action: "answer", title: "فتح المكالمة 📞" },
         ]
       : [],
   });
@@ -262,15 +272,28 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  if (event.action === "decline") return;
 
-  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  const notifData = event.notification.data || {};
+  const isCall = notifData.type === "call";
+  const target = new URL(notifData.url || (isCall ? "/calls" : "/"), self.location.origin).href;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
       for (const w of wins) {
         if (w.url.startsWith(self.location.origin) && "focus" in w) {
-          w.postMessage({ type: "OPEN_CHAT", url: target, chatId: event.notification.data?.chatId });
+          if (isCall) {
+            w.postMessage({
+              type: "OPEN_CALL",
+              url: target,
+              callId: notifData.callId || notifData.chatId,
+            });
+          } else {
+            w.postMessage({
+              type: "OPEN_CHAT",
+              url: target,
+              chatId: notifData.chatId,
+            });
+          }
           return w.focus();
         }
       }
@@ -433,7 +456,7 @@ export async function dispatchAppNotification({
     icon,
     badge: "/icons/badge-72.png",
     tag: tag || `app-${Date.now()}`,
-    renotify: true,
+    renotify: isCall,
     vibrate: !vibrateEnabled ? [] : (isCall ? [300, 150, 300, 150, 300] : [200, 100, 200]),
     data: { url, chatId: tag?.replace(/^(chat|call|msg)-/, "") },
   };
@@ -1048,6 +1071,7 @@ import {
   Send,
 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { enableNotifications } from "@/lib/notifications";
 
 export default function MandatoryNotificationModal() {
   const { userProfile } = useAuth();
@@ -1082,10 +1106,14 @@ export default function MandatoryNotificationModal() {
   }
 
   const handleRequestAll = async () => {
+    if (!userProfile?.uid) {
+      alert("استنى ثواني لحد ما الحساب يتحمّل وحاول تاني");
+      return;
+    }
     setLoading(true);
     try {
       // 1. Request Notifications first with dedicated gesture and register FCM token
-      const notifResult = await requestBrowserNotifications(userProfile?.uid);
+      const notifResult = await requestBrowserNotifications(userProfile.uid);
 
       // 2. Request Microphone sequentially (not concurrent, so mobile browsers don't auto-dismiss)
       try {
@@ -1100,12 +1128,13 @@ export default function MandatoryNotificationModal() {
         console.warn("Microphone permission note:", err);
       }
 
-      const notifNow = getNotificationStatus();
-      setStatus(notifNow);
-      if (notifNow === "granted" || notifResult) {
+      setStatus(getNotificationStatus());
+      if (notifResult) {
         try {
           localStorage.setItem("youssef_permissions_confirmed", "true");
         } catch {}
+      } else {
+        alert("تم طلب إذن المتصفح لكن فشل تسجيل رمز الإشعارات (FCM Token). يرجى الضغط على زر التحقق اليدوي بالأسفل أو التأكد من الاتصال بالإنترنت.");
       }
     } finally {
       setLoading(false);
@@ -1121,15 +1150,24 @@ export default function MandatoryNotificationModal() {
     }
   };
 
-  const handleManualCheck = () => {
-    const current = getNotificationStatus();
-    setStatus(current);
-    if (current === "granted") {
-      try {
-        localStorage.setItem("youssef_permissions_confirmed", "true");
-      } catch {}
-    } else {
-      alert("لم يتم تفعيل إذن الإشعارات بعد في المتصفح. اضغط على رمز القفل 🔒 أعلى شريط العنوان وقم باختيار (سماح/Allow) للإشعارات.");
+  const handleManualCheck = async () => {
+    if (getNotificationStatus() !== "granted" || !userProfile?.uid) {
+      alert("لم يتم تفعيل إذن الإشعارات بعد في المتصفح. اضغط على رمز القفل 🔒 وقم باختيار (سماح/Allow).");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await enableNotifications(userProfile.uid);
+      if (res.ok) {
+        setStatus("granted");
+        try {
+          localStorage.setItem("youssef_permissions_confirmed", "true");
+        } catch {}
+      } else {
+        alert("فشل تسجيل توكن الإشعارات، يرجى التأكد من اتصال الإنترنت وحاول مجدداً.");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1324,168 +1362,105 @@ const unsub = listenForIncomingCalls(userProfile.uid, (call) => {
 ### 6) منع تخزين الـ Service Worker في كاش المتصفح:
 - تم إنشاء ملف [`public/_headers`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_headers) لإجبار خوادم Cloudflare Pages على إرسال ترويسة `Cache-Control: no-cache, no-store, must-revalidate` لملفات السيرفيس وركر، مما يضمن تحديثها فورياً على جميع الهواتف.
 
+### 7) إصلاح ثغرة إغلاق المودال قبل تسجيل التوكن (Mandatory Notification Modal Bug):
+- **المشكلة السابقة:** كان المودال يقوم بحفظ `youssef_permissions_confirmed = "true"` في `localStorage` بمجرد أن يكون الإذن `granted`، حتى لو فشلت دالة `enableNotifications` في استخراج أو تسجيل الـ FCM Token في Firestore (بسبب بطء تحميل الـ uid، أو عدم إدخال الـ VAPID Key، أو مشاكل الاتصال). وكان المودال يختفي للأبد والمستخدم لا يعلم سبب عدم وصول الإشعارات في الخلفية.
+- **الحل المطبق:**
+  1. اشتراط وجود `userProfile?.uid` قبل محاولة التفعيل، وإظهار تنبيه توجيهي باللغة العربية: `"استنى ثواني لحد ما الحساب يتحمّل وحاول تاني"`.
+  2. عدم حفظ تأكيد الأذونات في `localStorage` إطلاقاً إلا إذا رجعت دالة التسجيل بنجاح (`notifResult === true` أو `res.ok === true`).
+  3. ربط زر "التحقق اليدوي" باستدعاء `enableNotifications(userProfile.uid)` للتأكد من وجود الـ Token في Firestore وتنبيه المستخدم عند أي فشل للإنترنت.
+
+### 8) فصل مسارات إشعارات المكالمات والرسائل في Service Worker:
+- **المشكلة السابقة:** كان زر "رفض" في إشعار المكالمة يقوم فقط بإغلاق الإشعار محلياً (`event.notification.close()`) دون تحديث حالة المكالمة في Firestore، فكان المتصل يظل يرن دون أن يعلم أن الطرف الآخر رفض. كما كان السيرفيس وركر يرسل `OPEN_CHAT` ويضع `callId` كبديل للـ `chatId`، مما يجعل مستمع النقر يفتح شات برقم المكالمة بالخطأ!
+- **الحل المطبق:**
+  1. إزالة زر "رفض" الوهمي من إشعار المكالمة، وجعل الزر الأساسي `فتح المكالمة 📞` يوجه مباشرة إلى صفحة المكالمات `/calls`.
+  2. إرسال حدث `OPEN_CALL` للمكالمات بدلاً من `OPEN_CHAT`، وتحديث دالة `listenNotificationClicks` لتدعم مسار المكالمات `onOpenCall` بشكل مستقل تماماً.
+
+### 9) المزامنة والتحديث الصامت المستمر للتوكن (`PWAClientManager`):
+- تم حقن `useAuth()` داخل [`PWAClientManager.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/pwa/PWAClientManager.tsx) في الـ Root Layout:
+  1. يقوم تلقائياً باستدعاء `refreshToken(userProfile.uid)` بشكل صامت فور تحميل الحساب إذا كان إذن الإشعارات مفعلاً مسبقاً، لمواجهة تدوير التوكنات (Token Rotation) التي تجريها جوجل كل فترة.
+  2. يستمع عالمياً لأحداث النقر على الإشعارات ويوجه لـ `/chat/${chatId}` أو `/calls`.
+
+### 10) تفادي خطأ 404 عند النقر على الإشعار والتطبيق مغلق (SPA Static Export):
+- لأن التطبيق مبني بـ Next.js مع `output: 'export'`، فإن صفحات الشات المتغيرة مثل `/chat/<id>` لا يتم توليد ملف HTML ثابت لكل معرف منها عند البناء.
+- لتفادي ظهور صفحة 404 عند تشغيل التطبيق من إشعار سحابي عبر `clients.openWindow('/chat/<id>')`:
+  - تم إنشاء ملف [`public/_redirects`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_redirects):
+    ```text
+    /chat/* /chat/direct.html 200
+    /* /index.html 200
+    ```
+  - يدعم هذا الملف مع إعداد `"not_found_handling": "single-page-application"` في `wrangler.jsonc` توجيه أي رابط لشات مغلق مباشرة لـ `/chat/direct.html` بكود 200، حيث يقرأ كود `ChatClient` المعرف من `window.location.pathname` ويفتح المحادثة المطلوبة فوراً.
+
+### 11) إصلاح أخطاء الصياغة في `public/sw.js` وتوافق الرنين:
+- تم تصحيح القوس غير المغلق في `event.waitUntil` داخل مستمع `notificationclick` في [`public/sw.js`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/sw.js).
+- تم ضبط خيار `renotify: isCall` في `dispatchAppNotification` حتى لا يصدر المتصفح رنيناً مزدوجاً عند وصول إشعار الدفع السحابي والإشعار المحلي معاً لنفس الرسالة.
+
+### 12) تدقيق الأمان والخصوصية (SignOut & Blocked Users):
+- تم التحقق من أن دالة `signOut()` في [`auth.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/lib/firebase/auth.ts) تستدعي دائماً `await disableNotifications(currentUid)` قبل تسجيل الخروج لمسح التوكن من وثيقة المستخدم وإلغائه من Firebase Messaging، لحماية خصوصية المستخدمين ومنع وصول إشعارات المستخدم السابق للجهاز بعد تسجيل الخروج.
+- تم التحقق من مطابقة اسم حقل المستخدمين المحظورين في الـ Cloud Function `blockedUsers` مع اسم الحقل المستخدم في استدعاءات `blockUser` في الواجهة، وإضافة حظر إشعارات المكالمات الواردة أيضاً في حال كان المتصل ضمن قائمة الحظر.
+
 ---
 
 ## 8. ☁️ كود الـ Cloud Functions المحدث لإرسال الإشعارات عند إغلاق التطبيق
 
-لكي تصل الإشعارات والمكالمات في الخلفية حتى عندما يكون التطبيق مقفولاً تماماً أو الهاتف في وضع السكون، هذا هو كود الـ Cloud Functions المحدث بالكامل:
+لضمان وصول الإشعارات والمكالمات في الخلفية حتى عندما يكون التطبيق مقفولاً تماماً أو الهاتف في وضع السكون، هذا هو كود الـ Cloud Functions المحدث بالكامل:
 
 **الملف:** [`functions/src/index.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/functions/src/index.ts)
 ```typescript
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getMessaging } from "firebase-admin/messaging";
-
-initializeApp();
-const db = getFirestore();
-const REGION = "europe-west1";
-
-/*
- * ASSUMED DATA MODEL:
- *   chats/{chatId}                 { participants: string[] }
- *   chats/{chatId}/messages/{id}   { senderId, text?, type? ("text"|"image"|"audio"|...) }
- *   users/{uid}                    { displayName, photoURL }
- *   users/{uid}/fcmTokens/{token}  (written by the client)
- *   calls/{callId}                 { callerId, callerName, receiverId, status: "ringing" }
- */
-
-const DEAD = [
-  "messaging/registration-token-not-registered",
-  "messaging/invalid-registration-token",
-];
-
-async function pushToUser(uid: string, data: Record<string, string>, urgent = false) {
-  const tokensSnap = await db.collection(`users/${uid}/fcmTokens`).get();
-  const tokens = tokensSnap.docs.map((d) => d.id);
-  if (!tokens.length) return;
-
-  const res = await getMessaging().sendEachForMulticast({
-    tokens,
-    data, // data-only: all values MUST be strings
-    webpush: { headers: { Urgency: urgent ? "high" : "normal", TTL: urgent ? "60" : "86400" } },
-  });
-
-  // Clean up tokens of uninstalled/expired devices
-  const dead: string[] = [];
-  res.responses.forEach((r, i) => {
-    if (!r.success && DEAD.includes(r.error?.code || "")) dead.push(tokens[i]);
-  });
-  await Promise.all(dead.map((t) => db.doc(`users/${uid}/fcmTokens/${t}`).delete()));
-}
-
-function getSafeIcon(photo: unknown): string {
-  if (typeof photo === "string" && photo.startsWith("https://")) {
-    return photo;
-  }
-  return "/icons/icon-192.png";
-}
-
-function preview(msg: FirebaseFirestore.DocumentData): string {
-  switch (msg.type) {
-    case "image": return "📷 صورة";
-    case "video": return "🎥 فيديو";
-    case "audio": return "🎤 رسالة صوتية";
-    case "file":  return "📎 ملف";
-    default: {
-      const t = String(msg.text ?? "");
-      if (t.startsWith("🔒#YF:")) return "🔒 رسالة جديدة";
-      return t.length > 120 ? t.slice(0, 117) + "…" : t;
-    }
-  }
-}
-
-export const onNewMessage = onDocumentCreated(
-  { document: "chats/{chatId}/messages/{messageId}", region: REGION },
-  async (event) => {
-    const msg = event.data?.data();
-    if (!msg) return;
-    const { chatId } = event.params;
-
-    const chat = await db.doc(`chats/${chatId}`).get();
-    const participants: string[] = chat.get("participants") ?? [];
-    const recipients = participants.filter((u) => u !== msg.senderId);
-    if (!recipients.length) return;
-
-    const sender = await db.doc(`users/${msg.senderId}`).get();
-    const senderName = sender.get("displayName") ?? msg.senderName ?? "رسالة جديدة";
-
-    await Promise.all(
-      recipients.map(async (uid) => {
-        // Skip if recipient has blocked sender or disabled message notifications
-        const recipientDoc = await db.doc(`users/${uid}`).get();
-        const prefs = recipientDoc.get("notificationPreferences") || {};
-        if (prefs.messages === false) return;
-
-        const blockedUsers: string[] = recipientDoc.get("blockedUsers") ?? [];
-        if (blockedUsers.includes(msg.senderId)) return;
-
-        const bodyText = prefs.preview === false ? "رسالة جديدة 💬" : preview(msg);
-
-        await pushToUser(uid, {
-          type: "message",
-          title: `${senderName} 💬`,
-          body: bodyText,
-          icon: getSafeIcon(sender.get("photoURL")),
-          chatId,
-          url: `/chat/${chatId}`,
-        });
-      })
-    );
-  }
-);
-
-export const onIncomingCall = onDocumentCreated(
-  { document: "calls/{callId}", region: REGION },
-  async (event) => {
-    const call = event.data?.data();
-    if (!call || call.status !== "ringing") return;
-
-    const caller = await db.doc(`users/${call.callerId}`).get();
-    const callerName = caller.get("displayName") ?? call.callerName ?? "مكالمة واردة";
-    const targetUid = call.receiverId || call.calleeId;
-
-    if (!targetUid) return;
-
-    // Check receiver notification preferences
-    const receiverDoc = await db.doc(`users/${targetUid}`).get();
-    const prefs = receiverDoc.get("notificationPreferences") || {};
-    if (prefs.calls === false) return;
-
-    const callId = event.params.callId;
-
-    await pushToUser(
-      targetUid,
-      {
-        type: "call",
-        title: `${callerName} 📞`,
-        body: call.type === "video" ? "📹 مكالمة فيديو واردة..." : "📞 مكالمة صوتية واردة...",
-        icon: getSafeIcon(caller.get("photoURL")),
-        callId,
-        chatId: call.chatId ?? callId,
-        url: `/calls`,
-      },
-      true
-    );
-  }
-);
-
+${functionsIndexTs}
 ```
 
-### خطوات تفعيل واختبار الإشعارات السحابية في بيئة الإنتاج:
-1. **نشر الدوال:**
+---
+
+## 9. 📱 كود إدارة PWA والسيرفيس وركر وإعادة التوجيه (PWA Client & Routing)
+
+### 1) ملف المدير العام للـ PWA والتحديث الصامت للتوكنات:
+**الملف:** [`src/components/pwa/PWAClientManager.tsx`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/pwa/PWAClientManager.tsx)
+```typescript
+${clientManagerTsx}
+```
+
+### 2) ملف السيرفيس وركر الأساسي للتطبيق PWA:
+**الملف:** [`public/sw.js`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/sw.js)
+```javascript
+${swWorkerJs}
+```
+
+### 3) ملف إعادة التوجيه لضمان فتح الشات من الإشعارات دون 404:
+**الملف:** [`public/_redirects`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_redirects)
+```text
+${redirectsTxt}
+```
+
+---
+
+## 10. 🎯 خطوات تفعيل واختبار الإشعارات السحابية في بيئة الإنتاج:
+
+1. **نشر الدوال والتحقق من الـ Region:**
    ```bash
    firebase deploy --only functions
    ```
-   *(يتطلب ترقية مشروع Firebase لخطة Blaze المجانية حتى حدود الاستخدام).*
+   > **ملاحظة هامة:** إذا ظهر خطأ في الـ region أثناء الرفع، افتح Firebase Console ← Firestore Database ← إعدادات الموقع، وتأكد أن المتغير `REGION` في [`functions/src/index.ts`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/functions/src/index.ts) يطابق موقع قاعدة البيانات (مثلاً `europe-west1` لقواعد `eur3` أو `us-central1` لقواعد `nam5`).
+
 2. **شهادة Web Push (VAPID Key):**
    - استخراج المفتاح العام من: Firebase Console ← Project Settings ← Cloud Messaging ← Web Push certificates.
-   - وضعه في ملف `.env.local` كـ `NEXT_PUBLIC_FIREBASE_VAPID_KEY=...` وفي إعدادات متغيرات البيئة في Cloudflare Pages قبل بناء المشروع.
+   - وضعه في ملف `.env.local` كـ `NEXT_PUBLIC_FIREBASE_VAPID_KEY=...` وفي متغيرات البيئة بـ Cloudflare Pages.
+
 3. **قواعد أمان Firestore:**
-   - تسمح للمستخدم بتحديث تفضيلاته وتوكنات FCM الخاصة به تحت:
-     `match /users/{userId}/fcmTokens/{token} { allow read, write: if request.auth.uid == userId; }`
+   - تم التحقق من أنها تسمح للمستخدم بتحديث التفضيلات `notificationPreferences` وتوكنات `fcmTokens`:
+     ```javascript
+     match /users/{userId} {
+       allow read: if true;
+       allow write: if request.auth != null;
+
+       match /fcmTokens/{token} {
+         allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+     }
+     ```
+
 4. **طريقة الاختبار الحقيقي على الهاتف:**
-   - تأكد من وجود توكن مسجل في Firestore تحت `users/{uid}/fcmTokens`.
-   - قم بإغلاق التطبيق تماماً وقفل شاشة الهاتف.
-   - أرسل رسالة أو ابدأ مكالمة من حساب آخر.
-   - ستصل الرسالة أو رنين المكالمة عبر إشعار الدفع السحابي بنجاح.
+   - بعد تفعيل الإشعارات، افتح Firestore Console وتأكد من إنشاء وثيقة للتوكن داخل:
+     `users/{uid}/fcmTokens/<token>`
+   - قم بإغلاق التطبيق تماماً (Swiping it away) وقفل شاشة الهاتف.
+   - أرسل رسالة من هاتف أو حساب آخر.
+   - ستصل الرسالة كإشعار دفع سحابي حتى مع إغلاق التطبيق، وبمجرد النقر عليها سيفتح التطبيق ويوجهك مباشرة لصفحة المحادثة!

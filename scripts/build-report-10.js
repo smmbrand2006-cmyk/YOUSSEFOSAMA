@@ -13,6 +13,9 @@ const pwaNotifsTs = read("src/lib/utils/pwaNotifications.ts");
 const modalTsx = read("src/components/chat/NotificationSettingsModal.tsx");
 const promptTsx = read("src/components/NotificationPrompt.tsx");
 const mandatoryModalTsx = read("src/components/pwa/MandatoryNotificationModal.tsx");
+const clientManagerTsx = read("src/components/pwa/PWAClientManager.tsx");
+const swWorkerJs = read("public/sw.js");
+const redirectsTxt = read("public/_redirects");
 const functionsIndexTs = read("functions/src/index.ts");
 
 const content = `# 🔔 التقرير العاشر: إعدادات الإشعارات الشاملة، إصلاحات الميكروفون، مكالمات WebRTC، وهندسة واجهة الموبايل
@@ -234,34 +237,108 @@ const unsub = listenForIncomingCalls(userProfile.uid, (call) => {
 ### 6) منع تخزين الـ Service Worker في كاش المتصفح:
 - تم إنشاء ملف [\`public/_headers\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_headers) لإجبار خوادم Cloudflare Pages على إرسال ترويسة \`Cache-Control: no-cache, no-store, must-revalidate\` لملفات السيرفيس وركر، مما يضمن تحديثها فورياً على جميع الهواتف.
 
+### 7) إصلاح ثغرة إغلاق المودال قبل تسجيل التوكن (Mandatory Notification Modal Bug):
+- **المشكلة السابقة:** كان المودال يقوم بحفظ \`youssef_permissions_confirmed = "true"\` في \`localStorage\` بمجرد أن يكون الإذن \`granted\`، حتى لو فشلت دالة \`enableNotifications\` في استخراج أو تسجيل الـ FCM Token في Firestore (بسبب بطء تحميل الـ uid، أو عدم إدخال الـ VAPID Key، أو مشاكل الاتصال). وكان المودال يختفي للأبد والمستخدم لا يعلم سبب عدم وصول الإشعارات في الخلفية.
+- **الحل المطبق:**
+  1. اشتراط وجود \`userProfile?.uid\` قبل محاولة التفعيل، وإظهار تنبيه توجيهي باللغة العربية: \`"استنى ثواني لحد ما الحساب يتحمّل وحاول تاني"\`.
+  2. عدم حفظ تأكيد الأذونات في \`localStorage\` إطلاقاً إلا إذا رجعت دالة التسجيل بنجاح (\`notifResult === true\` أو \`res.ok === true\`).
+  3. ربط زر "التحقق اليدوي" باستدعاء \`enableNotifications(userProfile.uid)\` للتأكد من وجود الـ Token في Firestore وتنبيه المستخدم عند أي فشل للإنترنت.
+
+### 8) فصل مسارات إشعارات المكالمات والرسائل في Service Worker:
+- **المشكلة السابقة:** كان زر "رفض" في إشعار المكالمة يقوم فقط بإغلاق الإشعار محلياً (\`event.notification.close()\`) دون تحديث حالة المكالمة في Firestore، فكان المتصل يظل يرن دون أن يعلم أن الطرف الآخر رفض. كما كان السيرفيس وركر يرسل \`OPEN_CHAT\` ويضع \`callId\` كبديل للـ \`chatId\`، مما يجعل مستمع النقر يفتح شات برقم المكالمة بالخطأ!
+- **الحل المطبق:**
+  1. إزالة زر "رفض" الوهمي من إشعار المكالمة، وجعل الزر الأساسي \`فتح المكالمة 📞\` يوجه مباشرة إلى صفحة المكالمات \`/calls\`.
+  2. إرسال حدث \`OPEN_CALL\` للمكالمات بدلاً من \`OPEN_CHAT\`، وتحديث دالة \`listenNotificationClicks\` لتدعم مسار المكالمات \`onOpenCall\` بشكل مستقل تماماً.
+
+### 9) المزامنة والتحديث الصامت المستمر للتوكن (\`PWAClientManager\`):
+- تم حقن \`useAuth()\` داخل [\`PWAClientManager.tsx\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/pwa/PWAClientManager.tsx) في الـ Root Layout:
+  1. يقوم تلقائياً باستدعاء \`refreshToken(userProfile.uid)\` بشكل صامت فور تحميل الحساب إذا كان إذن الإشعارات مفعلاً مسبقاً، لمواجهة تدوير التوكنات (Token Rotation) التي تجريها جوجل كل فترة.
+  2. يستمع عالمياً لأحداث النقر على الإشعارات ويوجه لـ \`/chat/\${chatId}\` أو \`/calls\`.
+
+### 10) تفادي خطأ 404 عند النقر على الإشعار والتطبيق مغلق (SPA Static Export):
+- لأن التطبيق مبني بـ Next.js مع \`output: 'export'\`، فإن صفحات الشات المتغيرة مثل \`/chat/<id>\` لا يتم توليد ملف HTML ثابت لكل معرف منها عند البناء.
+- لتفادي ظهور صفحة 404 عند تشغيل التطبيق من إشعار سحابي عبر \`clients.openWindow('/chat/<id>')\`:
+  - تم إنشاء ملف [\`public/_redirects\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_redirects):
+    \`\`\`text
+    /chat/* /chat/direct.html 200
+    /* /index.html 200
+    \`\`\`
+  - يدعم هذا الملف مع إعداد \`"not_found_handling": "single-page-application"\` في \`wrangler.jsonc\` توجيه أي رابط لشات مغلق مباشرة لـ \`/chat/direct.html\` بكود 200، حيث يقرأ كود \`ChatClient\` المعرف من \`window.location.pathname\` ويفتح المحادثة المطلوبة فوراً.
+
+### 11) إصلاح أخطاء الصياغة في \`public/sw.js\` وتوافق الرنين:
+- تم تصحيح القوس غير المغلق في \`event.waitUntil\` داخل مستمع \`notificationclick\` في [\`public/sw.js\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/sw.js).
+- تم ضبط خيار \`renotify: isCall\` في \`dispatchAppNotification\` حتى لا يصدر المتصفح رنيناً مزدوجاً عند وصول إشعار الدفع السحابي والإشعار المحلي معاً لنفس الرسالة.
+
+### 12) تدقيق الأمان والخصوصية (SignOut & Blocked Users):
+- تم التحقق من أن دالة \`signOut()\` في [\`auth.ts\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/lib/firebase/auth.ts) تستدعي دائماً \`await disableNotifications(currentUid)\` قبل تسجيل الخروج لمسح التوكن من وثيقة المستخدم وإلغائه من Firebase Messaging، لحماية خصوصية المستخدمين ومنع وصول إشعارات المستخدم السابق للجهاز بعد تسجيل الخروج.
+- تم التحقق من مطابقة اسم حقل المستخدمين المحظورين في الـ Cloud Function \`blockedUsers\` مع اسم الحقل المستخدم في استدعاءات \`blockUser\` في الواجهة، وإضافة حظر إشعارات المكالمات الواردة أيضاً في حال كان المتصل ضمن قائمة الحظر.
+
 ---
 
 ## 8. ☁️ كود الـ Cloud Functions المحدث لإرسال الإشعارات عند إغلاق التطبيق
 
-لكي تصل الإشعارات والمكالمات في الخلفية حتى عندما يكون التطبيق مقفولاً تماماً أو الهاتف في وضع السكون، هذا هو كود الـ Cloud Functions المحدث بالكامل:
+لضمان وصول الإشعارات والمكالمات في الخلفية حتى عندما يكون التطبيق مقفولاً تماماً أو الهاتف في وضع السكون، هذا هو كود الـ Cloud Functions المحدث بالكامل:
 
 **الملف:** [\`functions/src/index.ts\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/functions/src/index.ts)
 \`\`\`typescript
-${functionsIndexTs}
+\${functionsIndexTs}
 \`\`\`
 
-### خطوات تفعيل واختبار الإشعارات السحابية في بيئة الإنتاج:
-1. **نشر الدوال:**
+---
+
+## 9. 📱 كود إدارة PWA والسيرفيس وركر وإعادة التوجيه (PWA Client & Routing)
+
+### 1) ملف المدير العام للـ PWA والتحديث الصامت للتوكنات:
+**الملف:** [\`src/components/pwa/PWAClientManager.tsx\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/src/components/pwa/PWAClientManager.tsx)
+\`\`\`typescript
+\${clientManagerTsx}
+\`\`\`
+
+### 2) ملف السيرفيس وركر الأساسي للتطبيق PWA:
+**الملف:** [\`public/sw.js\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/sw.js)
+\`\`\`javascript
+\${swWorkerJs}
+\`\`\`
+
+### 3) ملف إعادة التوجيه لضمان فتح الشات من الإشعارات دون 404:
+**الملف:** [\`public/_redirects\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/public/_redirects)
+\`\`\`text
+\${redirectsTxt}
+\`\`\`
+
+---
+
+## 10. 🎯 خطوات تفعيل واختبار الإشعارات السحابية في بيئة الإنتاج:
+
+1. **نشر الدوال والتحقق من الـ Region:**
    \`\`\`bash
    firebase deploy --only functions
    \`\`\`
-   *(يتطلب ترقية مشروع Firebase لخطة Blaze المجانية حتى حدود الاستخدام).*
+   > **ملاحظة هامة:** إذا ظهر خطأ في الـ region أثناء الرفع، افتح Firebase Console ← Firestore Database ← إعدادات الموقع، وتأكد أن المتغير \`REGION\` في [\`functions/src/index.ts\`](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/functions/src/index.ts) يطابق موقع قاعدة البيانات (مثلاً \`europe-west1\` لقواعد \`eur3\` أو \`us-central1\` لقواعد \`nam5\`).
+
 2. **شهادة Web Push (VAPID Key):**
    - استخراج المفتاح العام من: Firebase Console ← Project Settings ← Cloud Messaging ← Web Push certificates.
-   - وضعه في ملف \`.env.local\` كـ \`NEXT_PUBLIC_FIREBASE_VAPID_KEY=...\` وفي إعدادات متغيرات البيئة في Cloudflare Pages قبل بناء المشروع.
+   - وضعه في ملف \`.env.local\` كـ \`NEXT_PUBLIC_FIREBASE_VAPID_KEY=...\` وفي متغيرات البيئة بـ Cloudflare Pages.
+
 3. **قواعد أمان Firestore:**
-   - تسمح للمستخدم بتحديث تفضيلاته وتوكنات FCM الخاصة به تحت:
-     \`match /users/{userId}/fcmTokens/{token} { allow read, write: if request.auth.uid == userId; }\`
+   - تم التحقق من أنها تسمح للمستخدم بتحديث التفضيلات \`notificationPreferences\` وتوكنات \`fcmTokens\`:
+     \`\`\`javascript
+     match /users/{userId} {
+       allow read: if true;
+       allow write: if request.auth != null;
+
+       match /fcmTokens/{token} {
+         allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+     }
+     \`\`\`
+
 4. **طريقة الاختبار الحقيقي على الهاتف:**
-   - تأكد من وجود توكن مسجل في Firestore تحت \`users/{uid}/fcmTokens\`.
-   - قم بإغلاق التطبيق تماماً وقفل شاشة الهاتف.
-   - أرسل رسالة أو ابدأ مكالمة من حساب آخر.
-   - ستصل الرسالة أو رنين المكالمة عبر إشعار الدفع السحابي بنجاح.
+   - بعد تفعيل الإشعارات، افتح Firestore Console وتأكد من إنشاء وثيقة للتوكن داخل:
+     \`users/{uid}/fcmTokens/<token>\`
+   - قم بإغلاق التطبيق تماماً (Swiping it away) وقفل شاشة الهاتف.
+   - أرسل رسالة من هاتف أو حساب آخر.
+   - ستصل الرسالة كإشعار دفع سحابي حتى مع إغلاق التطبيق، وبمجرد النقر عليها سيفتح التطبيق ويوجهك مباشرة لصفحة المحادثة!
 `;
 
 fs.writeFileSync(path.join(root, "report/10_NOTIFICATIONS_CALLS_MOBILE_FIXES.md"), content, "utf8");

@@ -142,7 +142,7 @@ export async function dispatchAppNotification({
     icon,
     badge: "/icons/badge-72.png",
     tag: tag || `app-${Date.now()}`,
-    renotify: true,
+    renotify: isCall,
     vibrate: !vibrateEnabled ? [] : (isCall ? [300, 150, 300, 150, 300] : [200, 100, 200]),
     data: { url, chatId: tag?.replace(/^(chat|call|msg)-/, "") },
   };

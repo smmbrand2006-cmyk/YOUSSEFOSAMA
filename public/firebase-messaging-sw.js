@@ -33,8 +33,7 @@ messaging.onBackgroundMessage((payload) => {
     data: { url: d.url || "/", chatId: d.chatId, callId: d.callId, type: d.type || "message" },
     actions: isCall
       ? [
-          { action: "answer", title: "رد" },
-          { action: "decline", title: "رفض" },
+          { action: "answer", title: "فتح المكالمة 📞" },
         ]
       : [],
   });
@@ -51,15 +50,28 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  if (event.action === "decline") return;
 
-  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  const notifData = event.notification.data || {};
+  const isCall = notifData.type === "call";
+  const target = new URL(notifData.url || (isCall ? "/calls" : "/"), self.location.origin).href;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
       for (const w of wins) {
         if (w.url.startsWith(self.location.origin) && "focus" in w) {
-          w.postMessage({ type: "OPEN_CHAT", url: target, chatId: event.notification.data?.chatId });
+          if (isCall) {
+            w.postMessage({
+              type: "OPEN_CALL",
+              url: target,
+              callId: notifData.callId || notifData.chatId,
+            });
+          } else {
+            w.postMessage({
+              type: "OPEN_CHAT",
+              url: target,
+              chatId: notifData.chatId,
+            });
+          }
           return w.focus();
         }
       }

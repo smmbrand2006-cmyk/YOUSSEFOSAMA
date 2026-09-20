@@ -101,13 +101,24 @@ export function listenForeground(getActiveChatId: () => string | null) {
   return () => unsub();
 }
 
-/** Lets a notification click switch chats inside an already-open window. */
-export function listenNotificationClicks(onOpenChat: (chatId: string) => void) {
+/** Lets a notification click switch chats or open calls inside an already-open window. */
+export function listenNotificationClicks(
+  onOpenChat: (chatId: string) => void,
+  onOpenCall?: (callId?: string, url?: string) => void
+) {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return () => {};
   }
   const handler = (e: MessageEvent) => {
-    if (e.data?.type === "OPEN_CHAT" && e.data.chatId) onOpenChat(e.data.chatId);
+    if (e.data?.type === "OPEN_CHAT" && e.data.chatId) {
+      onOpenChat(e.data.chatId);
+    } else if (e.data?.type === "OPEN_CALL") {
+      if (onOpenCall) {
+        onOpenCall(e.data.callId, e.data.url);
+      } else if (e.data?.url) {
+        window.location.href = e.data.url;
+      }
+    }
   };
   navigator.serviceWorker.addEventListener("message", handler);
   return () => navigator.serviceWorker.removeEventListener("message", handler);

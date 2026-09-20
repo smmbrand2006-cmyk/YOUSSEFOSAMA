@@ -33,14 +33,19 @@ export default function ChatLayout({
   // Wire FCM Foreground notifications and notification click actions
   useEffect(() => {
     const off1 = listenForeground(() => activeChat?.id || null);
-    const off2 = listenNotificationClicks((chatId) => {
-      const target = chats.find((c) => c.id === chatId);
-      if (target) {
-        setActiveChat(target);
-      } else {
-        router.push(`/chat/${chatId}`);
+    const off2 = listenNotificationClicks(
+      (chatId) => {
+        const target = chats.find((c) => c.id === chatId);
+        if (target) {
+          setActiveChat(target);
+        } else {
+          router.push(`/chat/${chatId}`);
+        }
+      },
+      (callId, url) => {
+        router.push(url || "/calls");
       }
-    });
+    );
     return () => {
       off1();
       off2();

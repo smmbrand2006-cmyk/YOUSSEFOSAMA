@@ -118,6 +118,9 @@ export const onIncomingCall = onDocumentCreated(
     const prefs = receiverDoc.get("notificationPreferences") || {};
     if (prefs.calls === false) return;
 
+    const blockedUsers: string[] = receiverDoc.get("blockedUsers") ?? [];
+    if (blockedUsers.includes(call.callerId)) return;
+
     const callId = event.params.callId;
 
     await pushToUser(

@@ -18,6 +18,7 @@ import {
   Send,
 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { enableNotifications } from "@/lib/notifications";
 
 export default function MandatoryNotificationModal() {
   const { userProfile } = useAuth();
@@ -52,10 +53,14 @@ export default function MandatoryNotificationModal() {
   }
 
   const handleRequestAll = async () => {
+    if (!userProfile?.uid) {
+      alert("استنى ثواني لحد ما الحساب يتحمّل وحاول تاني");
+      return;
+    }
     setLoading(true);
     try {
       // 1. Request Notifications first with dedicated gesture and register FCM token
-      const notifResult = await requestBrowserNotifications(userProfile?.uid);
+      const notifResult = await requestBrowserNotifications(userProfile.uid);
 
       // 2. Request Microphone sequentially (not concurrent, so mobile browsers don't auto-dismiss)
       try {
@@ -70,12 +75,13 @@ export default function MandatoryNotificationModal() {
         console.warn("Microphone permission note:", err);
       }
 
-      const notifNow = getNotificationStatus();
-      setStatus(notifNow);
-      if (notifNow === "granted" || notifResult) {
+      setStatus(getNotificationStatus());
+      if (notifResult) {
         try {
           localStorage.setItem("youssef_permissions_confirmed", "true");
         } catch {}
+      } else {
+        alert("تم طلب إذن المتصفح لكن فشل تسجيل رمز الإشعارات (FCM Token). يرجى الضغط على زر التحقق اليدوي بالأسفل أو التأكد من الاتصال بالإنترنت.");
       }
     } finally {
       setLoading(false);
@@ -91,15 +97,24 @@ export default function MandatoryNotificationModal() {
     }
   };
 
-  const handleManualCheck = () => {
-    const current = getNotificationStatus();
-    setStatus(current);
-    if (current === "granted") {
-      try {
-        localStorage.setItem("youssef_permissions_confirmed", "true");
-      } catch {}
-    } else {
-      alert("لم يتم تفعيل إذن الإشعارات بعد في المتصفح. اضغط على رمز القفل 🔒 أعلى شريط العنوان وقم باختيار (سماح/Allow) للإشعارات.");
+  const handleManualCheck = async () => {
+    if (getNotificationStatus() !== "granted" || !userProfile?.uid) {
+      alert("لم يتم تفعيل إذن الإشعارات بعد في المتصفح. اضغط على رمز القفل 🔒 وقم باختيار (سماح/Allow).");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await enableNotifications(userProfile.uid);
+      if (res.ok) {
+        setStatus("granted");
+        try {
+          localStorage.setItem("youssef_permissions_confirmed", "true");
+        } catch {}
+      } else {
+        alert("فشل تسجيل توكن الإشعارات، يرجى التأكد من اتصال الإنترنت وحاول مجدداً.");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

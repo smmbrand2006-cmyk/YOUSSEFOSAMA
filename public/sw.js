@@ -102,33 +102,45 @@ self.addEventListener('push', (event) => {
 // Notification click event
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/chat';
+  const notifData = event.notification.data || {};
+  const isCall = notifData.type === 'call';
+  const targetUrl = notifData.url || (isCall ? '/calls' : '/chat');
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if ('focus' in client) {
-          if (client.url.includes(targetUrl) || targetUrl === '/chat') {
-            return client.focus();
+        if ('focus' in client && client.url.startsWith(self.location.origin)) {
+          if (isCall) {
+            client.postMessage({
+              type: 'OPEN_CALL',
+              url: targetUrl,
+              callId: notifData.callId,
+            });
+          } else {
+            client.postMessage({
+              type: 'OPEN_CHAT',
+              url: targetUrl,
+              chatId: notifData.chatId,
+            });
           }
+          return client.focus();
         }
       }
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }
     })
+  );
+});
+
 // Handle direct messages to show system notifications
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data;
-    event.waitUntil(
-      self.registration.showNotification(title, {
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-192.png',
-        vibrate: [200, 100, 200],
-        ...options,
-      })
-    );
+    if (self.registration && self.registration.showNotification) {
+      self.registration.showNotification(title || 'Youssef App', options || {});
+    }
   }
 });
+
 
