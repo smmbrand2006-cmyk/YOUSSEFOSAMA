@@ -86,6 +86,19 @@ export default function AppHeader({
           </span>
         </button>
 
+        {/* Android APK Direct Download Button */}
+        <a
+          href="/youssef-app.apk"
+          download="youssef-app.apk"
+          className={styles.appHeaderBtn}
+          title="تحميل تطبيق أندرويد الحقيقي (APK)"
+          style={{ color: "#00a884", textDecoration: "none" }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
+            android
+          </span>
+        </a>
+
         {/* PWA Install Button */}
         {canInstall && (
           <button

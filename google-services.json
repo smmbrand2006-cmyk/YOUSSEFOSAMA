@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "608921253339",
+    "firebase_url": "https://rubber-f0574-default-rtdb.firebaseio.com",
+    "project_id": "rubber-f0574",
+    "storage_bucket": "rubber-f0574.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:608921253339:android:2874560cea73c1f1ab23fe",
+        "android_client_info": {
+          "package_name": "com.example.myapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_m2mirSRMziwz1yUi7fxnIgA1-ehfvVI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

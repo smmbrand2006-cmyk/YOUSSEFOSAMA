@@ -111,13 +111,26 @@ export default function PWAInstallBanner() {
       </div>
 
       <div className={styles.pwaBannerAction}>
+        {!isIOS && (
+          <a
+            href="/youssef-app.apk"
+            download="youssef-app.apk"
+            className={styles.pwaInstallBtn}
+            style={{ textDecoration: "none", background: "linear-gradient(135deg, #00A884, #008069)", display: "flex", alignItems: "center", gap: "6px" }}
+            title="تحميل تطبيق أندرويد الحقيقي (APK)"
+          >
+            <Download size={15} />
+            تحميل APK
+          </a>
+        )}
+
         <button
           type="button"
           className={styles.pwaInstallBtn}
           onClick={handleInstallClick}
         >
           <Download size={15} />
-          {isIOS ? "طريقة التثبيت" : "تثبيت الآن"}
+          {isIOS ? "طريقة التثبيت" : "تثبيت PWA"}
         </button>
 
         <button

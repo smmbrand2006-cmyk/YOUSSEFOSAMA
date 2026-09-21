@@ -38,6 +38,9 @@
 10. **[10_NOTIFICATIONS_CALLS_MOBILE_FIXES.md](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/report/10_NOTIFICATIONS_CALLS_MOBILE_FIXES.md)**
     - إعدادات الإشعارات والتنبيهات الشاملة، إصلاح ارتداد الشات لأسفل عند الإرسال، معالجة أذونات الميكروفون على الموبايل، ضمانات جودة وتزامن الصوت في المكالمات (WebRTC)، وضبط أبعاد وتنسيق شاشات الهواتف الصغيرة مع الفونت الهندسي الرسمي (YOUSSEF APP).
 
+11. **[11_FLUTTER_ANDROID_WHATSAPP_APP.md](file:///c:/Users/youse/OneDrive/Desktop/youssef%20app/report/11_FLUTTER_ANDROID_WHATSAPP_APP.md)**
+    - تطبيق أندرويد الأصيل الكامل (Flutter) ونسخة واتساب المطابقة 100% بالوضع المظلم، الربط مع نفس قاعدة بيانات Firebase، محرك التشفير اليومي الدوار ARC3 في Dart، وبناء وتوفير ملف APK للتحميل المباشر من الموقع.
+
 ---
 
 تم إعداد هذا التقرير ليكون مرجعاً تقنياً وهندسياً متكاملاً لأي مطور أو مستخدم يريد فهم كل سطر برمجي في المشروع! 🌟
