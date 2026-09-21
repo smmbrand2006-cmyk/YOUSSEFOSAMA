@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/constants/whatsapp_colors.dart';
+import '../../../../providers/locale_provider.dart';
 
 class CommunitiesTab extends StatelessWidget {
   const CommunitiesTab({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final locale = Provider.of<LocaleProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? WhatsAppColors.textPrimary : WhatsAppColors.lightTextPrimary;
+    final secondaryTextColor = isDark ? WhatsAppColors.textSecondary : WhatsAppColors.lightTextSecondary;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -14,8 +21,8 @@ class CommunitiesTab extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(24),
-              decoration: const BoxDecoration(
-                color: WhatsAppColors.surfaceCard,
+              decoration: BoxDecoration(
+                color: isDark ? WhatsAppColors.surfaceCard : WhatsAppColors.lightSurfaceCard,
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -25,21 +32,21 @@ class CommunitiesTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              "حافظ على تواصل مجتمعك",
+            Text(
+              locale.t('communities_title'),
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: WhatsAppColors.textPrimary,
+                color: primaryTextColor,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              "تتيح لك المجتمعات الجمع بين المجموعات ذات الاهتمامات المشتركة وإرسال إعلانات لجميع الأعضاء بسهولة.",
+            Text(
+              locale.t('communities_desc'),
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: WhatsAppColors.textSecondary,
+                color: secondaryTextColor,
                 fontSize: 14,
                 height: 1.4,
               ),
@@ -48,7 +55,7 @@ class CommunitiesTab extends StatelessWidget {
             ElevatedButton(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("ميزة إنشاء المجتمعات ستتوفر قريباً")),
+                  SnackBar(content: Text(locale.t('start_community'))),
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -57,7 +64,7 @@ class CommunitiesTab extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
               ),
-              child: const Text("بدء مجتمع جديد", style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(locale.t('start_community'), style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),

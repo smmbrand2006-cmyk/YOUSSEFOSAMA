@@ -5,6 +5,7 @@ import '../../../../core/utils/date_formatter.dart';
 import '../../../../data/models/chat_model.dart';
 import '../../../../providers/auth_provider.dart';
 import '../../../../providers/chat_provider.dart';
+import '../../../widgets/app_update_banner.dart';
 import '../../../widgets/custom_avatar.dart';
 import '../../chat/chat_screen.dart';
 
@@ -21,7 +22,7 @@ class ChatsTab extends StatelessWidget {
       return const Center(child: CircularProgressIndicator(color: WhatsAppColors.primaryGreen));
     }
 
-    if (chatProvider.isLoadingChats) {
+    if (chatProvider.isLoadingChats && chatProvider.chats.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(color: WhatsAppColors.primaryGreen),
       );
@@ -29,8 +30,15 @@ class ChatsTab extends StatelessWidget {
 
     final allChats = chatProvider.chats;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? WhatsAppColors.textPrimary : WhatsAppColors.lightTextPrimary;
+    final secondaryTextColor = isDark ? WhatsAppColors.textSecondary : WhatsAppColors.lightTextSecondary;
+
     return ListView(
       children: [
+        // App Live Update Alert Banner from Admin Dashboard
+        const AppUpdateBanner(),
+
         // Pinned Support Chat (#123)
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -39,18 +47,18 @@ class ChatsTab extends StatelessWidget {
             radius: 25,
             isSupport: true,
           ),
-          title: const Row(
+          title: Row(
             children: [
               Text(
                 "الدعم الفني الرسمي (#123)",
                 style: TextStyle(
-                  color: WhatsAppColors.textPrimary,
+                  color: primaryTextColor,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              SizedBox(width: 6),
-              Icon(Icons.verified, color: WhatsAppColors.primaryGreen, size: 16),
+              const SizedBox(width: 6),
+              const Icon(Icons.verified, color: WhatsAppColors.primaryGreen, size: 16),
             ],
           ),
           subtitle: const Text(
@@ -59,6 +67,7 @@ class ChatsTab extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: WhatsAppColors.primaryGreen, fontSize: 13.5),
           ),
+
           trailing: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
@@ -92,14 +101,14 @@ class ChatsTab extends StatelessWidget {
               children: [
                 Icon(Icons.mark_chat_unread_outlined, size: 64, color: WhatsAppColors.textMuted.withOpacity(0.5)),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   "لا توجد محادثات بعد",
-                  style: TextStyle(color: WhatsAppColors.textSecondary, fontSize: 16),
+                  style: TextStyle(color: secondaryTextColor, fontSize: 16),
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   "اضغط على الزر الأخضر بالأسفل لبدء محادثة جديدة بالكود (#)",
-                  style: TextStyle(color: WhatsAppColors.textMuted, fontSize: 13),
+                  style: TextStyle(color: secondaryTextColor.withOpacity(0.7), fontSize: 13),
                 ),
               ],
             ),
@@ -115,6 +124,10 @@ class ChatsTab extends StatelessWidget {
   }
 
   Widget _buildChatTile(BuildContext context, ChatModel chat, String currentUid) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? WhatsAppColors.textPrimary : WhatsAppColors.lightTextPrimary;
+    final secondaryTextColor = isDark ? WhatsAppColors.textSecondary : WhatsAppColors.lightTextSecondary;
+
     final title = chat.getChatTitle(currentUid);
     final lastMessageText = chat.getDecryptedLastMessage();
     final avatarUrl = chat.getChatAvatar(currentUid);
@@ -139,7 +152,7 @@ class ChatsTab extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: WhatsAppColors.textPrimary,
+                color: primaryTextColor,
                 fontSize: 16,
                 fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.w600,
               ),
@@ -148,7 +161,7 @@ class ChatsTab extends StatelessWidget {
           Text(
             timeStr,
             style: TextStyle(
-              color: unreadCount > 0 ? WhatsAppColors.primaryGreen : WhatsAppColors.textSecondary,
+              color: unreadCount > 0 ? WhatsAppColors.primaryGreen : secondaryTextColor,
               fontSize: 12,
               fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
             ),
@@ -167,12 +180,13 @@ class ChatsTab extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: unreadCount > 0 ? WhatsAppColors.textPrimary : WhatsAppColors.textSecondary,
+                color: unreadCount > 0 ? primaryTextColor : secondaryTextColor,
                 fontSize: 13.5,
                 fontWeight: unreadCount > 0 ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ),
+
           if (unreadCount > 0)
             Container(
               padding: const EdgeInsets.all(6),

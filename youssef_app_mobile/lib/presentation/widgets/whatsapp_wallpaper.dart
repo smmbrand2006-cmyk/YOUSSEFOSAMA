@@ -8,10 +8,11 @@ class WhatsAppWallpaper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      color: WhatsAppColors.chatBackground,
+      color: isDark ? WhatsAppColors.chatBackground : WhatsAppColors.lightChatBackground,
       child: CustomPaint(
-        painter: _WhatsAppDoodlePainter(),
+        painter: _WhatsAppDoodlePainter(isDark: isDark),
         child: child,
       ),
     );
@@ -19,12 +20,18 @@ class WhatsAppWallpaper extends StatelessWidget {
 }
 
 class _WhatsAppDoodlePainter extends CustomPainter {
+  final bool isDark;
+  _WhatsAppDoodlePainter({this.isDark = true});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF182229).withOpacity(0.35)
+      ..color = isDark
+          ? const Color(0xFF182229).withOpacity(0.35)
+          : const Color(0xFFD1D7DB).withOpacity(0.55)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
+
 
     const spacing = 70.0;
     for (double x = 20; x < size.width; x += spacing) {

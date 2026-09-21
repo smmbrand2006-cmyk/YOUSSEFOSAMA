@@ -43,6 +43,11 @@ class ChatModel {
     final rawUnread = data['unreadCount'] as Map<String, dynamic>? ?? {};
     final unread = rawUnread.map((k, v) => MapEntry(k, (v is num) ? v.toInt() : 0));
 
+    final isSupportChat = data['isSupport'] == true ||
+        doc.id.contains("support") ||
+        (data['participants'] as List?)?.contains("support_official_123") == true ||
+        names.values.any((n) => n.contains("دعم") || n.contains("123") || n.toLowerCase().contains("support"));
+
     return ChatModel(
       id: doc.id,
       type: data['type'] ?? 'direct',
@@ -50,7 +55,7 @@ class ChatModel {
       participants: List<String>.from(data['participants'] ?? []),
       participantNames: names,
       participantAvatars: avatars,
-      isSupport: data['isSupport'] ?? (doc.id.contains("support") || data['userCode'] == "123"),
+      isSupport: isSupportChat,
       lastMessage: data['lastMessage'] as Map<String, dynamic>?,
       unreadCount: unread,
       updatedAt: data['updatedAt'],

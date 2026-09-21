@@ -88,15 +88,16 @@ export default function AppHeader({
 
         {/* Android APK Direct Download Button */}
         <a
-          href="/youssef-app.apk"
-          download="youssef-app.apk"
-          className={styles.appHeaderBtn}
+          href="https://github.com/smmbrand2006-cmyk/YOUSSEFOSAMA/releases/latest/download/YOUSSEF_APP.apk"
+          className={styles.apkDownloadBadge}
           title="تحميل تطبيق أندرويد الحقيقي (APK)"
-          style={{ color: "#00a884", textDecoration: "none" }}
+          target="_blank"
+          rel="noopener noreferrer"
         >
           <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
             android
           </span>
+          <span className={styles.apkDownloadBadgeText}>تحميل التطبيق (APK)</span>
         </a>
 
         {/* PWA Install Button */}

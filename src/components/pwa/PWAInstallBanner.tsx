@@ -113,11 +113,12 @@ export default function PWAInstallBanner() {
       <div className={styles.pwaBannerAction}>
         {!isIOS && (
           <a
-            href="/youssef-app.apk"
-            download="youssef-app.apk"
+            href="https://github.com/smmbrand2006-cmyk/YOUSSEFOSAMA/releases/latest/download/YOUSSEF_APP.apk"
             className={styles.pwaInstallBtn}
             style={{ textDecoration: "none", background: "linear-gradient(135deg, #00A884, #008069)", display: "flex", alignItems: "center", gap: "6px" }}
             title="تحميل تطبيق أندرويد الحقيقي (APK)"
+            target="_blank"
+            rel="noopener noreferrer"
           >
             <Download size={15} />
             تحميل APK

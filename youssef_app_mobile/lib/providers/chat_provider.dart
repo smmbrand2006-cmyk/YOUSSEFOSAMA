@@ -32,8 +32,8 @@ class ChatProvider extends ChangeNotifier {
     });
   }
 
-  Stream<List<MessageModel>> getMessagesStream(String chatId) {
-    return _firestoreService.getMessagesStream(chatId);
+  Stream<List<MessageModel>> getMessagesStream(String chatId, [String? currentUserId]) {
+    return _firestoreService.getMessagesStream(chatId, currentUserId);
   }
 
   Future<void> sendMessage({
@@ -43,6 +43,7 @@ class ChatProvider extends ChangeNotifier {
     String? mediaUrl,
     String messageType = "text",
     required List<String> participants,
+    Map<String, dynamic>? replyTo,
   }) async {
     await _firestoreService.sendMessage(
       chatId: chatId,
@@ -52,7 +53,24 @@ class ChatProvider extends ChangeNotifier {
       mediaUrl: mediaUrl,
       messageType: messageType,
       participants: participants,
+      replyTo: replyTo,
     );
+  }
+
+  Future<void> deleteMessageForEveryone(String chatId, String messageId) async {
+    await _firestoreService.deleteMessageForEveryone(chatId, messageId);
+  }
+
+  Future<void> deleteMessageForMe(String chatId, String messageId, String userId) async {
+    await _firestoreService.deleteMessageForMe(chatId, messageId, userId);
+  }
+
+  Future<void> toggleStarMessage(String chatId, String messageId, String userId, bool isCurrentlyStarred) async {
+    await _firestoreService.toggleStarMessage(chatId, messageId, userId, isCurrentlyStarred);
+  }
+
+  Future<void> togglePinMessage(String chatId, String messageId, bool isCurrentlyPinned, {String? previewText}) async {
+    await _firestoreService.togglePinMessage(chatId, messageId, isCurrentlyPinned, previewText: previewText);
   }
 
   Future<void> markAsRead(String chatId, String userId) async {

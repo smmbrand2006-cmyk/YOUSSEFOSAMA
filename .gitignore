@@ -39,3 +39,8 @@ next-env.d.ts
 # firebase functions
 /functions/lib/
 /functions/node_modules/
+
+# apk binaries (handled via GitHub Releases)
+*.apk
+public/*.apk
+youssef_app_mobile/android/build/

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/whatsapp_colors.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/theme_provider.dart';
 import '../home/home_screen.dart';
 import 'register_screen.dart';
 
@@ -33,9 +34,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!mounted) return;
     if (success) {
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -54,9 +56,11 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? WhatsAppColors.textPrimary : WhatsAppColors.lightTextPrimary;
+    final secondaryTextColor = isDark ? WhatsAppColors.textSecondary : WhatsAppColors.lightTextSecondary;
 
     return Scaffold(
-      backgroundColor: WhatsAppColors.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -64,44 +68,52 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo
-                Image.asset(
-                  'assets/images/logo.png',
-                  width: 80,
-                  height: 80,
-                  errorBuilder: (_, __, ___) => const CircleAvatar(
-                    radius: 40,
-                    backgroundColor: WhatsAppColors.primaryGreen,
-                    child: Icon(Icons.chat_rounded, color: Colors.white, size: 40),
+                // Top Theme Switcher
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: isDark ? Colors.amber : WhatsAppColors.primaryGreen),
+                    onPressed: () {
+                      Provider.of<ThemeProvider>(context, listen: false).setTheme(isDark ? 'light' : 'dark');
+                    },
                   ),
+                ),
+                // Logo
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: WhatsAppColors.primaryGreen.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.chat_bubble_rounded, color: WhatsAppColors.primaryGreen, size: 52),
                 ),
                 const SizedBox(height: 20),
 
-                const Text(
-                  "تسجيل الدخول إلى WhatsApp",
+                Text(
+                  "تسجيل الدخول إلى YOUSSEF APP",
                   style: TextStyle(
-                    color: WhatsAppColors.textPrimary,
+                    color: primaryTextColor,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  "أدخل اسم المستخدم أو كود الحساب (#Code) وكلمة المرور",
+                Text(
+                  "أدخل اسم المستخدم أو رقم الهاتف وكلمة المرور",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: WhatsAppColors.textSecondary, fontSize: 13.5),
+                  style: TextStyle(color: secondaryTextColor, fontSize: 13.5),
                 ),
                 const SizedBox(height: 32),
 
                 // Identifier input
                 TextField(
                   controller: _emailController,
-                  style: const TextStyle(color: WhatsAppColors.textPrimary),
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.person_outline, color: WhatsAppColors.iconDefault),
-                    hintText: "اسم المستخدم أو البريد أو #الكود",
+                  style: TextStyle(color: primaryTextColor),
+                  decoration: InputDecoration(
+                    prefixIcon: Icon(Icons.person_outline, color: secondaryTextColor),
+                    hintText: "اسم المستخدم أو رقم الهاتف",
                     filled: true,
-                    fillColor: WhatsAppColors.searchBarBg,
+                    fillColor: isDark ? WhatsAppColors.searchBarBg : WhatsAppColors.lightSearchBarBg,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -110,19 +122,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
-                  style: const TextStyle(color: WhatsAppColors.textPrimary),
+                  style: TextStyle(color: primaryTextColor),
                   decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.lock_outline, color: WhatsAppColors.iconDefault),
+                    prefixIcon: Icon(Icons.lock_outline, color: secondaryTextColor),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                        color: WhatsAppColors.iconDefault,
+                        color: secondaryTextColor,
                       ),
                       onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     ),
                     hintText: "كلمة المرور",
                     filled: true,
-                    fillColor: WhatsAppColors.searchBarBg,
+                    fillColor: isDark ? WhatsAppColors.searchBarBg : WhatsAppColors.lightSearchBarBg,
                   ),
                 ),
                 const SizedBox(height: 28),

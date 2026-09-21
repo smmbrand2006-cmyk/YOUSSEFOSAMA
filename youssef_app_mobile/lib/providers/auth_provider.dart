@@ -117,15 +117,21 @@ class AuthProvider extends ChangeNotifier {
   }
 
   String _cleanAuthError(String raw) {
-    if (raw.contains("user-not-found") || raw.contains("wrong-password") || raw.contains("invalid-credential")) {
-      return "بيانات الدخول غير صحيحة، يرجى التأكد والمحاولة مرة أخرى.";
+    if (raw.contains("user-not-found") ||
+        raw.contains("wrong-password") ||
+        raw.contains("invalid-credential") ||
+        raw.contains("invalid-email")) {
+      return "بيانات الدخول غير صحيحة، يرجى التأكد من اسم المستخدم أو رقم الهاتف وكلمة المرور.";
     }
     if (raw.contains("email-already-in-use")) {
-      return "هذا الحساب مسجل بالفعل، يرجى تسجيل الدخول.";
+      return "هذا الحساب أو الرقم مسجل بالفعل، يرجى تسجيل الدخول.";
     }
     if (raw.contains("weak-password")) {
-      return "كلمة المرور ضعيفة جداً، يرجى اختيار كلمة مرور أطول.";
+      return "كلمة المرور ضعيفة جداً، يرجى اختيار كلمة مرور أطول (6 خانات أو أكثر).";
     }
-    return "حدث خطأ أثناء المصادقة: $raw";
+    if (raw.contains("network-request-failed")) {
+      return "تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت.";
+    }
+    return "تعذر تسجيل الدخول، يرجى التأكد من صحة البيانات والمحاولة مجدداً.";
   }
 }

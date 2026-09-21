@@ -27,52 +27,120 @@ class AuthService {
     return (100000 + rnd.nextInt(900000)).toString();
   }
 
-  /// Sign In with Email / Username and Password
+  static String codeToEmail(String code) {
+    final clean = code.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_.-]'), '_');
+    // Ensure clean part does not consist solely of underscores/dots or start/end invalidly
+    final alphanumericPart = clean.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final safeLocal = alphanumericPart.isEmpty
+        ? 'user_${code.trim().hashCode.abs()}'
+        : clean.replaceAll(RegExp(r'_+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
+    return '$safeLocal@youssef.app';
+  }
+
+  /// Sign In with Email, Phone Number, Username or UserCode
   Future<UserModel> signIn({required String email, required String password}) async {
-    String cleanEmail = email.trim();
-    // Support login with username/code if not an email format
-    if (!cleanEmail.contains('@')) {
-      // Find email by userCode or displayName
-      final query = await _firestore
+    final input = email.trim();
+    String targetEmail = input;
+
+    if (!input.contains('@')) {
+      final cleanCode = input.replaceAll('#', '').trim();
+
+      // 1. Try finding user by exact userCode (phone / account code)
+      final codeQuery = await _firestore
           .collection('users')
-          .where('userCode', isEqualTo: cleanEmail.replaceAll('#', ''))
+          .where('userCode', isEqualTo: cleanCode)
           .limit(1)
           .get();
 
-      if (query.docs.isNotEmpty) {
-        cleanEmail = query.docs.first.data()['email'] ?? cleanEmail;
+      if (codeQuery.docs.isNotEmpty) {
+        final data = codeQuery.docs.first.data();
+        final storedEmail = data['email']?.toString();
+        if (storedEmail != null && storedEmail.contains('@') && !storedEmail.startsWith('_')) {
+          targetEmail = storedEmail;
+        } else {
+          targetEmail = codeToEmail(data['userCode']?.toString() ?? cleanCode);
+        }
       } else {
-        // Try looking by displayName
+        // 2. Try finding user by exact displayName
         final nameQuery = await _firestore
             .collection('users')
-            .where('displayName', isEqualTo: cleanEmail)
+            .where('displayName', isEqualTo: input)
             .limit(1)
             .get();
+
         if (nameQuery.docs.isNotEmpty) {
-          cleanEmail = nameQuery.docs.first.data()['email'] ?? cleanEmail;
+          final data = nameQuery.docs.first.data();
+          final storedEmail = data['email']?.toString();
+          if (storedEmail != null && storedEmail.contains('@') && !storedEmail.startsWith('_')) {
+            targetEmail = storedEmail;
+          } else {
+            targetEmail = codeToEmail(data['userCode']?.toString() ?? cleanCode);
+          }
         } else {
-          // Default domain fallback
-          cleanEmail = "$cleanEmail@youssefapp.com";
+          // 3. Fallback scan by lowercase displayName or userCode
+          final allSnap = await _firestore.collection('users').limit(100).get();
+          DocumentSnapshot? matchedDoc;
+          final lower = input.toLowerCase();
+
+          for (final d in allSnap.docs) {
+            final data = d.data();
+            final dName = (data['displayName'] ?? '').toString().toLowerCase();
+            final dCode = (data['userCode'] ?? '').toString().toLowerCase();
+            if (dName == lower || dCode == lower) {
+              matchedDoc = d;
+              break;
+            }
+          }
+
+          if (matchedDoc != null) {
+            final data = matchedDoc.data() as Map<String, dynamic>;
+            final storedEmail = data['email']?.toString();
+            if (storedEmail != null && storedEmail.contains('@') && !storedEmail.startsWith('_')) {
+              targetEmail = storedEmail;
+            } else {
+              targetEmail = codeToEmail(data['userCode']?.toString() ?? cleanCode);
+            }
+          } else {
+            targetEmail = codeToEmail(cleanCode);
+          }
         }
       }
     }
 
-    final cred = await _auth.signInWithEmailAndPassword(
-      email: cleanEmail,
-      password: password,
-    );
+    UserCredential cred;
+    try {
+      cred = await _auth.signInWithEmailAndPassword(
+        email: targetEmail,
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      // Fallback for legacy accounts created with @youssefapp.com
+      if ((e.code == 'user-not-found' || e.code == 'invalid-credential') && targetEmail.endsWith('@youssef.app')) {
+        final legacyEmail = targetEmail.replaceAll('@youssef.app', '@youssefapp.com');
+        try {
+          cred = await _auth.signInWithEmailAndPassword(
+            email: legacyEmail,
+            password: password,
+          );
+        } catch (_) {
+          rethrow;
+        }
+      } else {
+        rethrow;
+      }
+    }
 
     final userDoc = await _firestore.collection('users').doc(cred.user!.uid).get();
     if (userDoc.exists) {
       return UserModel.fromFirestore(userDoc);
     } else {
       // Create document if missing
-      final userCode = await _generateUniqueUserCode();
+      final userCode = input.contains('@') ? await _generateUniqueUserCode() : input.replaceAll('#', '').trim();
       final newUser = UserModel(
         uid: cred.user!.uid,
-        displayName: cred.user!.displayName ?? cleanEmail.split('@')[0],
+        displayName: cred.user!.displayName ?? input.split('@')[0],
         userCode: userCode,
-        email: cleanEmail,
+        email: targetEmail,
         isOnline: true,
       );
       await _firestore.collection('users').doc(cred.user!.uid).set(newUser.toMap());
@@ -80,31 +148,37 @@ class AuthService {
     }
   }
 
-  /// Register new user account
+  /// Register new user account with Email or Phone/Code
   Future<UserModel> register({
     required String displayName,
     required String email,
     required String password,
     String? bio,
   }) async {
-    String cleanEmail = email.trim();
-    if (!cleanEmail.contains('@')) {
-      cleanEmail = "${cleanEmail.toLowerCase().replaceAll(' ', '')}@youssefapp.com";
+    final cleanInput = email.trim();
+    String targetEmail;
+    String userCode;
+
+    if (cleanInput.contains('@')) {
+      targetEmail = cleanInput;
+      userCode = await _generateUniqueUserCode();
+    } else {
+      userCode = cleanInput.replaceAll('#', '').trim();
+      targetEmail = codeToEmail(userCode);
     }
 
     final cred = await _auth.createUserWithEmailAndPassword(
-      email: cleanEmail,
+      email: targetEmail,
       password: password,
     );
 
     await cred.user!.updateDisplayName(displayName.trim());
 
-    final userCode = await _generateUniqueUserCode();
     final newUser = UserModel(
       uid: cred.user!.uid,
       displayName: displayName.trim(),
       userCode: userCode,
-      email: cleanEmail,
+      email: targetEmail,
       bio: bio ?? "مرحباً! أنا أستخدم تطبيق يوسف.",
       isOnline: true,
       lastSeen: FieldValue.serverTimestamp(),
@@ -130,13 +204,23 @@ class AuthService {
     final data = <String, dynamic>{};
     if (displayName != null) {
       data['displayName'] = displayName.trim();
-      await user.updateDisplayName(displayName.trim());
+      try {
+        await user.updateDisplayName(displayName.trim());
+      } catch (_) {}
     }
     if (bio != null) data['bio'] = bio.trim();
-    if (photoUrl != null) data['photoUrl'] = photoUrl;
+    if (photoUrl != null) {
+      data['photoUrl'] = photoUrl;
+      // Only update photoURL in FirebaseAuth if it's a valid HTTP URL (Base64 exceeds Auth character limit)
+      if (photoUrl.startsWith('http')) {
+        try {
+          await user.updatePhotoURL(photoUrl);
+        } catch (_) {}
+      }
+    }
 
     if (data.isNotEmpty) {
-      await _firestore.collection('users').doc(user.uid).update(data);
+      await _firestore.collection('users').doc(user.uid).set(data, SetOptions(merge: true));
     }
   }
 

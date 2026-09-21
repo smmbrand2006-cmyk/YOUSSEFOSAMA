@@ -45,18 +45,34 @@ class FirestoreService {
     return 0;
   }
 
-  /// Stream of messages for a chat
-  Stream<List<MessageModel>> getMessagesStream(String chatId) {
+  /// Stream of messages for a chat (optionally filter out deleted for user)
+  Stream<List<MessageModel>> getMessagesStream(String chatId, [String? currentUserId]) {
     return _firestore
         .collection('chats')
         .doc(chatId)
         .collection('messages')
-        .orderBy('createdAt', descending: false)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) => MessageModel.fromFirestore(doc)).toList();
+      final list = snapshot.docs.map((doc) => MessageModel.fromFirestore(doc)).toList();
+      // Robust chronological sort: use clientTimestamp (always non-null immediately) or createdAt
+      list.sort((a, b) {
+        final timeA = a.clientTimestamp ??
+            (a.createdAt is Timestamp
+                ? (a.createdAt as Timestamp).millisecondsSinceEpoch
+                : 0);
+        final timeB = b.clientTimestamp ??
+            (b.createdAt is Timestamp
+                ? (b.createdAt as Timestamp).millisecondsSinceEpoch
+                : 0);
+        return timeA.compareTo(timeB);
+      });
+      if (currentUserId != null) {
+        return list.where((m) => !m.isDeletedForUser(currentUserId)).toList();
+      }
+      return list;
     });
   }
+
 
   /// Send encrypted message and update chat preview atomically
   Future<void> sendMessage({
@@ -67,6 +83,7 @@ class FirestoreService {
     String? mediaUrl,
     String messageType = "text",
     required List<String> participants,
+    Map<String, dynamic>? replyTo,
   }) async {
     final encryptedText = EncryptionHelper.encryptMessageText(text);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -76,8 +93,16 @@ class FirestoreService {
       'senderName': senderName,
       'text': encryptedText,
       if (mediaUrl != null) 'mediaUrl': mediaUrl,
+      'type': messageType,
       'messageType': messageType,
       'readBy': [senderId],
+      'reactions': {},
+      'isEdited': false,
+      'isDeleted': false,
+      'deletedFor': [],
+      'starredBy': [],
+      'isPinned': false,
+      if (replyTo != null) 'replyTo': replyTo,
       'createdAt': FieldValue.serverTimestamp(),
       'clientTimestamp': nowMs,
     };
@@ -105,6 +130,7 @@ class FirestoreService {
         'text': encryptedText,
         'senderId': senderId,
         'senderName': senderName,
+        'type': messageType,
         'createdAt': FieldValue.serverTimestamp(),
         'clientTimestamp': nowMs,
       },
@@ -115,20 +141,85 @@ class FirestoreService {
     await batch.commit();
   }
 
+  /// Delete message for everyone (only sender can do this)
+  Future<void> deleteMessageForEveryone(String chatId, String messageId) async {
+    try {
+      await _firestore
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .update({
+        'isDeleted': true,
+        'text': EncryptionHelper.encryptMessageText('🚫 تم حذف هذه الرسالة'),
+        'deletedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+  }
+
+  /// Delete message for me only (adds userId to deletedFor)
+  Future<void> deleteMessageForMe(String chatId, String messageId, String userId) async {
+    try {
+      await _firestore
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .update({
+        'deletedFor': FieldValue.arrayUnion([userId]),
+      });
+    } catch (_) {}
+  }
+
+  /// Toggle star on a message
+  Future<void> toggleStarMessage(String chatId, String messageId, String userId, bool isStarred) async {
+    try {
+      await _firestore
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .update({
+        'starredBy': isStarred ? FieldValue.arrayRemove([userId]) : FieldValue.arrayUnion([userId]),
+      });
+    } catch (_) {}
+  }
+
+  /// Toggle pin message in chat
+  Future<void> togglePinMessage(String chatId, String messageId, bool isPinned, {String? previewText}) async {
+    try {
+      final msgRef = _firestore.collection('chats').doc(chatId).collection('messages').doc(messageId);
+      final chatRef = _firestore.collection('chats').doc(chatId);
+      final batch = _firestore.batch();
+      batch.update(msgRef, {'isPinned': !isPinned});
+      batch.update(chatRef, {
+        'pinnedMessage': !isPinned ? {'id': messageId, 'text': previewText ?? ''} : FieldValue.delete(),
+      });
+      await batch.commit();
+    } catch (_) {}
+  }
+
   /// Mark chat as read for user
   Future<void> markChatAsRead(String chatId, String userId) async {
     try {
       await _firestore.collection('chats').doc(chatId).update({
         'unreadCount.$userId': 0,
+        'lastRead.$userId': FieldValue.serverTimestamp(),  // ✅ Website uses lastRead
       });
     } catch (_) {}
   }
 
   /// Find or create a direct 1:1 chat between two users
+  /// ✅ FIXED: now includes all fields the website expects (isPinned, isArchived, isMuted, lastRead)
   Future<ChatModel> getOrCreateDirectChat({
     required UserModel currentUser,
     required UserModel targetUser,
   }) async {
+    // If target is support user (#123), route to support chat
+    if (targetUser.userCode == "123") {
+      return getOrCreateSupportChat(currentUser);
+    }
+
     // Check if chat already exists
     final query = await _firestore
         .collection('chats')
@@ -143,9 +234,38 @@ class FirestoreService {
       }
     }
 
-    // Create new direct chat
+    // Create new direct chat with ALL fields for website compatibility
     final newDoc = _firestore.collection('chats').doc();
-    final newChat = ChatModel(
+    final chatData = {
+      'type': 'direct',
+      'participants': [currentUser.uid, targetUser.uid],
+      'participantNames': {
+        currentUser.uid: currentUser.displayName,
+        targetUser.uid: targetUser.displayName,
+      },
+      'participantAvatars': {
+        if (currentUser.photoUrl != null) currentUser.uid: currentUser.photoUrl!,
+        if (targetUser.photoUrl != null) targetUser.uid: targetUser.photoUrl!,
+      },
+      'unreadCount': {
+        currentUser.uid: 0,
+        targetUser.uid: 0,
+      },
+      // ✅ Website compatibility fields
+      'lastRead': {
+        currentUser.uid: FieldValue.serverTimestamp(),
+        targetUser.uid: FieldValue.serverTimestamp(),
+      },
+      'isPinned': {},
+      'isArchived': {},
+      'isMuted': {},
+      'updatedAt': FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    await newDoc.set(chatData);
+
+    return ChatModel(
       id: newDoc.id,
       type: "direct",
       participants: [currentUser.uid, targetUser.uid],
@@ -164,114 +284,132 @@ class FirestoreService {
       updatedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
     );
-
-    await newDoc.set({
-      'type': 'direct',
-      'participants': [currentUser.uid, targetUser.uid],
-      'participantNames': {
-        currentUser.uid: currentUser.displayName,
-        targetUser.uid: targetUser.displayName,
-      },
-      'participantAvatars': {
-        if (currentUser.photoUrl != null) currentUser.uid: currentUser.photoUrl!,
-        if (targetUser.photoUrl != null) targetUser.uid: targetUser.photoUrl!,
-      },
-      'unreadCount': {
-        currentUser.uid: 0,
-        targetUser.uid: 0,
-      },
-      'updatedAt': FieldValue.serverTimestamp(),
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    return newChat;
   }
 
-  /// Find or create the official Support #123 chat
+  /// ✅ FIXED: Find or create the official Support #123 chat
+  /// Dynamically resolves the real support user with userCode == '123' (matches Next.js website)
   Future<ChatModel> getOrCreateSupportChat(UserModel currentUser) async {
-    final supportId = "support_official_123_${currentUser.uid}";
-    final docRef = _firestore.collection('chats').doc(supportId);
-    final doc = await docRef.get();
+    const String supportCode = "123";
+    const String defaultSupportName = "الدعم الفني (123) 🎧";
 
-    if (doc.exists) {
-      return ChatModel.fromFirestore(doc);
+    // 1. Find support user by userCode == '123' (matches Next.js openOrCreateSupportChat)
+    String supportUid = "support_official_123";
+    String supportName = defaultSupportName;
+
+    final supportQuery = await _firestore
+        .collection('users')
+        .where('userCode', isEqualTo: supportCode)
+        .limit(1)
+        .get();
+
+    if (supportQuery.docs.isNotEmpty) {
+      final doc = supportQuery.docs.first;
+      supportUid = doc.id;
+      final data = doc.data();
+      supportName = (data['displayName'] as String?)?.isNotEmpty == true
+          ? data['displayName']
+          : defaultSupportName;
+    } else {
+      // Fallback create placeholder if no user has code 123
+      final supportDocRef = _firestore.collection('users').doc(supportUid);
+      final supportDoc = await supportDocRef.get();
+      if (!supportDoc.exists) {
+        await supportDocRef.set({
+          'uid': supportUid,
+          'userCode': supportCode,
+          'displayName': defaultSupportName,
+          'bio': 'فريق الدعم الفني والمساعدة الرسمي',
+          'createdAt': FieldValue.serverTimestamp(),
+          'lastSeen': FieldValue.serverTimestamp(),
+          'isOnline': true,
+          'contacts': [],
+          'blockedUsers': [],
+        });
+      }
     }
 
+    // 2. Search for existing direct chat with support
+    final chatsQuery = await _firestore
+        .collection('chats')
+        .where('participants', arrayContains: currentUser.uid)
+        .get();
+
+    for (final doc in chatsQuery.docs) {
+      final data = doc.data();
+      final participants = List<String>.from(data['participants'] ?? []);
+      final chatType = data['type'] ?? 'direct';
+      // Matches either real supportUid or placeholder support_official_123
+      if (chatType == 'direct' && (participants.contains(supportUid) || participants.contains("support_official_123"))) {
+        return ChatModel.fromFirestore(doc);
+      }
+    }
+
+    // 3. Create new support chat with addDoc (auto-generated ID, same as website)
     final welcomeText = EncryptionHelper.encryptMessageText(
-      "أهلاً بك في الدعم الفني الرسمي لتطبيق يوسف شات! فريقنا متواجد 24/7 لمساعدتك في أي استفسار."
+      "مرحباً بك في الدعم الفني! كيف يمكننا مساعدتك اليوم؟ 🎧",
     );
 
-    final chat = ChatModel(
-      id: supportId,
-      type: "direct",
-      name: "الدعم الفني الرسمي (#123)",
-      participants: [currentUser.uid, "support_official_123"],
-      participantNames: {
-        currentUser.uid: currentUser.displayName,
-        "support_official_123": "الدعم الفني الرسمي (#123)",
-      },
-      isSupport: true,
-      lastMessage: {
-        'text': welcomeText,
-        'senderId': "support_official_123",
-        'senderName': "الدعم الفني",
-        'createdAt': FieldValue.serverTimestamp(),
-        'clientTimestamp': DateTime.now().millisecondsSinceEpoch,
-      },
-      unreadCount: {
-        currentUser.uid: 0,
-        "support_official_123": 0,
-      },
-      updatedAt: FieldValue.serverTimestamp(),
-      createdAt: FieldValue.serverTimestamp(),
-    );
-
-    await docRef.set({
+    final chatRef = await _firestore.collection('chats').add({
       'type': 'direct',
-      'isSupport': true,
-      'name': 'الدعم الفني الرسمي (#123)',
-      'participants': [currentUser.uid, "support_official_123"],
+      'participants': [currentUser.uid, supportUid],
       'participantNames': {
         currentUser.uid: currentUser.displayName,
-        "support_official_123": "الدعم الفني الرسمي (#123)",
+        supportUid: supportName,
       },
       'lastMessage': {
         'text': welcomeText,
-        'senderId': "support_official_123",
-        'senderName': "الدعم الفني",
+        'senderId': supportUid,
+        'type': 'text',
         'createdAt': FieldValue.serverTimestamp(),
         'clientTimestamp': DateTime.now().millisecondsSinceEpoch,
       },
-      'unreadCount': {
-        currentUser.uid: 0,
-        "support_official_123": 0,
+      'lastRead': {
+        currentUser.uid: FieldValue.serverTimestamp(),
+        supportUid: FieldValue.serverTimestamp(),
       },
+      'isPinned': {
+        currentUser.uid: true,
+      },
+      'isArchived': {},
+      'isMuted': {},
+      'unreadCount': {
+        currentUser.uid: 1,
+        supportUid: 0,
+      },
+      'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-      'createdAt': FieldValue.serverTimestamp(),
     });
 
-    // Also add initial welcome message
-    await docRef.collection('messages').add({
-      'senderId': 'support_official_123',
-      'senderName': 'الدعم الفني الرسمي (#123)',
-      'text': welcomeText,
+    // 4. Add initial welcome message
+    await chatRef.collection('messages').add({
+      'senderId': supportUid,
+      'senderName': supportName,
+      'text': EncryptionHelper.encryptMessageText(
+        "أهلاً بك في الدعم الفني الرسمي! تفضل بكتابة استفسارك أو مشكلتك وسنقوم بالرد عليك في أقرب وقت. 🎧💬",
+      ),
+      'type': 'text',
       'messageType': 'text',
-      'readBy': [currentUser.uid],
-      'createdAt': FieldValue.serverTimestamp(),
+      'reactions': {},
+      'isEdited': false,
+      'isDeleted': false,
+      'deletedFor': [],
       'clientTimestamp': DateTime.now().millisecondsSinceEpoch,
+      'createdAt': FieldValue.serverTimestamp(),
     });
 
-    return chat;
+    final newDoc = await chatRef.get();
+    return ChatModel.fromFirestore(newDoc);
   }
 
-  /// Search user by userCode (exact) or displayName
+  /// Search user by userCode, phone number, or displayName
+  /// Prioritizes exact matches and requires at least 2-3 characters to avoid dumping users
   Future<List<UserModel>> searchUsers(String query, String currentUid) async {
     final clean = query.trim().replaceAll('#', '');
-    if (clean.isEmpty) return [];
+    if (clean.length < 2) return [];
 
-    final results = <UserModel>[];
+    final resultsMap = <String, UserModel>{};
 
-    // Try finding by userCode first
+    // 1. Exact match by userCode (phone / account code)
     final codeSnap = await _firestore
         .collection('users')
         .where('userCode', isEqualTo: clean)
@@ -280,27 +418,48 @@ class FirestoreService {
 
     for (final doc in codeSnap.docs) {
       if (doc.id != currentUid) {
-        results.add(UserModel.fromFirestore(doc));
+        resultsMap[doc.id] = UserModel.fromFirestore(doc);
       }
     }
 
-    if (results.isNotEmpty) return results;
-
-    // Search by display name
+    // 2. Exact match by displayName
     final nameSnap = await _firestore
         .collection('users')
-        .where('displayName', isGreaterThanOrEqualTo: clean)
-        .where('displayName', isLessThanOrEqualTo: '$clean\uf8ff')
-        .limit(10)
+        .where('displayName', isEqualTo: query.trim())
+        .limit(5)
         .get();
 
     for (final doc in nameSnap.docs) {
-      if (doc.id != currentUid && !results.any((u) => u.uid == doc.id)) {
-        results.add(UserModel.fromFirestore(doc));
+      if (doc.id != currentUid) {
+        resultsMap[doc.id] = UserModel.fromFirestore(doc);
       }
     }
 
-    return results;
+    // If exact match found, return immediately without broad scanning
+    if (resultsMap.isNotEmpty) {
+      return resultsMap.values.toList();
+    }
+
+    // 3. Substring matching only when search is at least 3 characters
+    if (clean.length >= 3) {
+      final allSnap = await _firestore
+          .collection('users')
+          .limit(80)
+          .get();
+
+      final lower = clean.toLowerCase();
+      for (final doc in allSnap.docs) {
+        if (doc.id == currentUid) continue;
+        final u = UserModel.fromFirestore(doc);
+        final nameLower = u.displayName.toLowerCase();
+        final codeLower = u.userCode.toLowerCase();
+        if (codeLower == lower || nameLower == lower || nameLower.startsWith(lower) || nameLower.contains(lower)) {
+          resultsMap[doc.id] = u;
+        }
+      }
+    }
+
+    return resultsMap.values.toList();
   }
 
   /// Block / Unblock User

@@ -46,6 +46,8 @@ dependencies:
   cached_network_image: ^3.4.1
   shared_preferences: ^2.5.3
   uuid: ^4.6.0
+  audioplayers: ^6.1.0
+  flutter_local_notifications: ^18.0.1
 
 dev_dependencies:
   flutter_test:
@@ -71,6 +73,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/sounds/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

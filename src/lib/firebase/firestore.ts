@@ -31,11 +31,11 @@ import { encryptMessageText, decryptMessageText } from "@/lib/utils/encryption";
  */
 export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
   const cleanTerm = searchTerm.replace(/^#/, "").trim();
-  if (!cleanTerm) return [];
+  if (!cleanTerm || cleanTerm.length < 2) return [];
 
   const resultsMap = new Map<string, UserProfile>();
 
-  // 1. Exact match by user code
+  // 1. Exact match by user code (phone number / code)
   const codeQuery = query(
     collection(db, "users"),
     where("userCode", "==", cleanTerm)
@@ -43,21 +43,34 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
   const codeSnap = await getDocs(codeQuery);
   codeSnap.forEach((d) => resultsMap.set(d.id, d.data() as UserProfile));
 
-  // 2. Search users with case-insensitive matching
-  const allUsersQuery = query(collection(db, "users"), limit(150));
-  const allSnap = await getDocs(allUsersQuery);
-  const lower = cleanTerm.toLowerCase();
+  // 2. Exact match by displayName
+  const nameQuery = query(
+    collection(db, "users"),
+    where("displayName", "==", cleanTerm)
+  );
+  const nameSnap = await getDocs(nameQuery);
+  nameSnap.forEach((d) => resultsMap.set(d.id, d.data() as UserProfile));
 
-  allSnap.forEach((d) => {
-    const u = d.data() as UserProfile;
-    if (
-      u.userCode?.toLowerCase().includes(lower) ||
-      u.displayName?.toLowerCase().includes(lower) ||
-      u.email?.toLowerCase().includes(lower)
-    ) {
-      resultsMap.set(d.id, u);
-    }
-  });
+  // If exact match found, return immediately
+  if (resultsMap.size > 0) {
+    return Array.from(resultsMap.values());
+  }
+
+  // 3. Search users with case-insensitive matching only when 3+ chars
+  if (cleanTerm.length >= 3) {
+    const allUsersQuery = query(collection(db, "users"), limit(80));
+    const allSnap = await getDocs(allUsersQuery);
+    const lower = cleanTerm.toLowerCase();
+
+    allSnap.forEach((d) => {
+      const u = d.data() as UserProfile;
+      const uCode = (u.userCode || "").toLowerCase();
+      const uName = (u.displayName || "").toLowerCase();
+      if (uCode === lower || uName === lower || uName.startsWith(lower) || uName.includes(lower)) {
+        resultsMap.set(d.id, u);
+      }
+    });
+  }
 
   return Array.from(resultsMap.values());
 }

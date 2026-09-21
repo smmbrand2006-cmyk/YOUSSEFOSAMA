@@ -91,9 +91,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
               TextButton(
                 onPressed: () {
                   Navigator.pop(ctx);
-                  Navigator.pushReplacement(
+                  Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
                   );
                 },
                 child: const Text("ابدأ المحادثة الآن 🚀", style: TextStyle(color: WhatsAppColors.primaryGreen, fontWeight: FontWeight.bold)),
@@ -102,9 +103,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         );
       } else {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
         );
       }
     } else {
@@ -126,13 +128,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? WhatsAppColors.textPrimary : WhatsAppColors.lightTextPrimary;
+    final secondaryTextColor = isDark ? WhatsAppColors.textSecondary : WhatsAppColors.lightTextSecondary;
 
     return Scaffold(
-      backgroundColor: WhatsAppColors.background,
       appBar: AppBar(
-        title: const Text("إنشاء حساب جديد"),
+        title: Text("إنشاء حساب جديد", style: TextStyle(color: primaryTextColor)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back, color: primaryTextColor),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -141,22 +145,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Column(
             children: [
-              const Text(
+              Text(
                 "أدخل بياناتك للحصول على كود المستخدم الخاص بك فورياً",
                 textAlign: TextAlign.center,
-                style: TextStyle(color: WhatsAppColors.textSecondary, fontSize: 13.5),
+                style: TextStyle(color: secondaryTextColor, fontSize: 13.5),
               ),
               const SizedBox(height: 24),
 
               // Name
               TextField(
                 controller: _nameController,
-                style: const TextStyle(color: WhatsAppColors.textPrimary),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.person, color: WhatsAppColors.iconDefault),
+                style: TextStyle(color: primaryTextColor),
+                decoration: InputDecoration(
+                  prefixIcon: Icon(Icons.person, color: secondaryTextColor),
                   hintText: "الاسم الظاهر (مثال: يوسف أسامة)",
                   filled: true,
-                  fillColor: WhatsAppColors.searchBarBg,
+                  fillColor: isDark ? WhatsAppColors.searchBarBg : WhatsAppColors.lightSearchBarBg,
                 ),
               ),
               const SizedBox(height: 16),
@@ -164,12 +168,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
               // Email / Username
               TextField(
                 controller: _emailController,
-                style: const TextStyle(color: WhatsAppColors.textPrimary),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.alternate_email, color: WhatsAppColors.iconDefault),
+                style: TextStyle(color: primaryTextColor),
+                decoration: InputDecoration(
+                  prefixIcon: Icon(Icons.alternate_email, color: secondaryTextColor),
                   hintText: "اسم المستخدم أو البريد الإلكتروني",
                   filled: true,
-                  fillColor: WhatsAppColors.searchBarBg,
+                  fillColor: isDark ? WhatsAppColors.searchBarBg : WhatsAppColors.lightSearchBarBg,
                 ),
               ),
               const SizedBox(height: 16),
@@ -178,19 +182,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
               TextField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
-                style: const TextStyle(color: WhatsAppColors.textPrimary),
+                style: TextStyle(color: primaryTextColor),
                 decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.lock_outline, color: WhatsAppColors.iconDefault),
+                  prefixIcon: Icon(Icons.lock_outline, color: secondaryTextColor),
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                      color: WhatsAppColors.iconDefault,
+                      color: secondaryTextColor,
                     ),
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
                   hintText: "كلمة المرور (6 خانات على الأقل)",
                   filled: true,
-                  fillColor: WhatsAppColors.searchBarBg,
+                  fillColor: isDark ? WhatsAppColors.searchBarBg : WhatsAppColors.lightSearchBarBg,
                 ),
               ),
               const SizedBox(height: 16),
@@ -198,12 +202,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
               // Bio
               TextField(
                 controller: _bioController,
-                style: const TextStyle(color: WhatsAppColors.textPrimary),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.info_outline, color: WhatsAppColors.iconDefault),
+                style: TextStyle(color: primaryTextColor),
+                decoration: InputDecoration(
+                  prefixIcon: Icon(Icons.info_outline, color: secondaryTextColor),
                   hintText: "الحالة / النبذة الشخصية (Bio)",
                   filled: true,
-                  fillColor: WhatsAppColors.searchBarBg,
+                  fillColor: isDark ? WhatsAppColors.searchBarBg : WhatsAppColors.lightSearchBarBg,
                 ),
               ),
               const SizedBox(height: 32),

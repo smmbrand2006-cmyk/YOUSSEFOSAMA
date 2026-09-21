@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/whatsapp_colors.dart';
 
@@ -33,35 +32,44 @@ class CustomAvatar extends StatelessWidget {
       );
     } else if (photoUrl != null && photoUrl!.isNotEmpty) {
       if (photoUrl!.startsWith('data:image')) {
-        // Base64
+        // Base64 image
         try {
           final clean = photoUrl!.split(',').last;
           final bytes = base64Decode(clean);
-          avatarWidget = CircleAvatar(
-            radius: radius,
-            backgroundImage: MemoryImage(bytes),
+          avatarWidget = ClipOval(
+            child: Image.memory(
+              bytes,
+              width: radius * 2,
+              height: radius * 2,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _buildFallback(),
+            ),
           );
         } catch (_) {
           avatarWidget = _buildFallback();
         }
       } else {
-        // Network URL
-        avatarWidget = CachedNetworkImage(
-          imageUrl: photoUrl!,
-          imageBuilder: (context, imageProvider) => CircleAvatar(
-            radius: radius,
-            backgroundImage: imageProvider,
+        // Network URL (Image.network works flawlessly on Web & Mobile without CORS issues)
+        avatarWidget = ClipOval(
+          child: Image.network(
+            photoUrl!,
+            width: radius * 2,
+            height: radius * 2,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => _buildFallback(),
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return CircleAvatar(
+                radius: radius,
+                backgroundColor: WhatsAppColors.surfaceCard,
+                child: const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: WhatsAppColors.primaryGreen),
+                ),
+              );
+            },
           ),
-          placeholder: (context, url) => CircleAvatar(
-            radius: radius,
-            backgroundColor: WhatsAppColors.surfaceCard,
-            child: const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: WhatsAppColors.primaryGreen),
-            ),
-          ),
-          errorWidget: (context, url, error) => _buildFallback(),
         );
       }
     } else {
@@ -84,7 +92,12 @@ class CustomAvatar extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: WhatsAppColors.lightGreen,
                   shape: BoxShape.circle,
-                  border: Border.all(color: WhatsAppColors.background, width: 2),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? WhatsAppColors.background
+                        : Colors.white,
+                    width: 2,
+                  ),
                 ),
               ),
             ),

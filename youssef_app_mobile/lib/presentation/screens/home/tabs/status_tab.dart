@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../core/constants/whatsapp_colors.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../../../data/models/status_model.dart';
@@ -101,6 +103,9 @@ class _StatusTabState extends State<StatusTab> {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final currentUser = auth.currentUser;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? WhatsAppColors.textPrimary : WhatsAppColors.lightTextPrimary;
+    final secondaryTextColor = isDark ? WhatsAppColors.textSecondary : WhatsAppColors.lightTextSecondary;
 
     if (currentUser == null) return const SizedBox();
 
@@ -137,10 +142,10 @@ class _StatusTabState extends State<StatusTab> {
                   ),
                 ],
               ),
-              title: const Text(
+              title: Text(
                 "حالتي",
                 style: TextStyle(
-                  color: WhatsAppColors.textPrimary,
+                  color: primaryTextColor,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -149,17 +154,17 @@ class _StatusTabState extends State<StatusTab> {
                 myStatuses.isNotEmpty
                     ? "${myStatuses.length} حالة نشطة • انقر للعرض"
                     : "انقر لإضافة تحديث إلى حالتك",
-                style: const TextStyle(color: WhatsAppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: secondaryTextColor, fontSize: 13),
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.edit, color: WhatsAppColors.iconDefault),
+                    icon: Icon(Icons.edit, color: isDark ? WhatsAppColors.iconDefault : WhatsAppColors.lightIconDefault),
                     onPressed: _showAddTextStatusDialog,
                   ),
                   IconButton(
-                    icon: const Icon(Icons.camera_alt, color: WhatsAppColors.iconDefault),
+                    icon: Icon(Icons.camera_alt, color: isDark ? WhatsAppColors.iconDefault : WhatsAppColors.lightIconDefault),
                     onPressed: _pickAndPublishImageStatus,
                   ),
                 ],
@@ -174,19 +179,19 @@ class _StatusTabState extends State<StatusTab> {
             ),
 
             if (othersStatuses.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text(
                   "المستجدات الحديثة",
                   style: TextStyle(
-                    color: WhatsAppColors.textSecondary,
+                    color: secondaryTextColor,
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
               for (final status in othersStatuses) ...[
-                _buildStatusTile(status, currentUser.uid),
+                _buildStatusTile(status, currentUser.uid, primaryTextColor, secondaryTextColor),
                 const Divider(indent: 72),
               ],
             ],
@@ -196,7 +201,12 @@ class _StatusTabState extends State<StatusTab> {
     );
   }
 
-  Widget _buildStatusTile(StatusModel status, String currentUid) {
+  Widget _buildStatusTile(
+    StatusModel status,
+    String currentUid,
+    Color primaryTextColor,
+    Color secondaryTextColor,
+  ) {
     final isViewed = status.isViewedBy(currentUid);
     final timeStr = DateFormatter.formatChatTime(status.createdAt);
 
@@ -219,15 +229,15 @@ class _StatusTabState extends State<StatusTab> {
       ),
       title: Text(
         status.userName,
-        style: const TextStyle(
-          color: WhatsAppColors.textPrimary,
+        style: TextStyle(
+          color: primaryTextColor,
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
       ),
       subtitle: Text(
         timeStr,
-        style: const TextStyle(color: WhatsAppColors.textSecondary, fontSize: 13),
+        style: TextStyle(color: secondaryTextColor, fontSize: 13),
       ),
       onTap: () => _viewStatus(status),
     );
@@ -245,6 +255,23 @@ class _StatusTabState extends State<StatusTab> {
       );
     }
 
+    Widget buildMediaWidget(String url) {
+      if (url.startsWith('data:image')) {
+        try {
+          final clean = url.split(',').last;
+          final bytes = base64Decode(clean);
+          return Image.memory(bytes, fit: BoxFit.contain);
+        } catch (_) {
+          return const Center(child: Icon(Icons.broken_image, color: Colors.white, size: 50));
+        }
+      }
+      return Image.network(
+        url,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image, color: Colors.white, size: 50)),
+      );
+    }
+
     showDialog(
       context: context,
       builder: (_) => Dialog(
@@ -256,7 +283,7 @@ class _StatusTabState extends State<StatusTab> {
             // Status content
             Center(
               child: status.type == 'image' && status.mediaUrl != null
-                  ? Image.network(status.mediaUrl!, fit: BoxFit.contain)
+                  ? buildMediaWidget(status.mediaUrl!)
                   : Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
@@ -270,6 +297,7 @@ class _StatusTabState extends State<StatusTab> {
                       ),
                     ),
             ),
+
             // Header
             Positioned(
               top: 40,

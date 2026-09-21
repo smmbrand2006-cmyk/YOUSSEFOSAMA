@@ -3,10 +3,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'core/services/notification_service.dart';
+import 'core/services/sound_service.dart';
 import 'core/theme/whatsapp_theme.dart';
+import 'data/services/chat_cache_service.dart';
 import 'presentation/screens/splash_screen.dart';
 import 'providers/auth_provider.dart';
 import 'providers/chat_provider.dart';
+import 'providers/locale_provider.dart';
+import 'providers/theme_provider.dart';
 
 // Firebase configuration (shared across Android & Web)
 const FirebaseOptions _firebaseOptions = FirebaseOptions(
@@ -39,6 +45,23 @@ void main() async {
     options: kIsWeb ? _firebaseOptions : null,
   );
 
+  // Enable offline persistence for Firestore
+  try {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } catch (_) {}
+
+  // Initialize Chat Cache Service (0ms loading)
+  await ChatCacheService.instance.init();
+
+  // Initialize Sound Service
+  await SoundService.instance.initialize();
+
+  // Initialize Notification Service
+  await NotificationService.instance.initialize();
+
   runApp(const YoussefApp());
 }
 
@@ -51,20 +74,34 @@ class YoussefApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => LocaleProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: MaterialApp(
-        title: 'YOUSSEF APP',
-        debugShowCheckedModeBanner: false,
-        theme: WhatsAppTheme.darkTheme,
-        builder: (context, child) {
-          // Wrap with RTL Directionality for authentic Arabic WhatsApp experience
-          return Directionality(
-            textDirection: TextDirection.rtl,
-            child: child ?? const SizedBox(),
+      child: Consumer2<LocaleProvider, ThemeProvider>(
+        builder: (context, localeProvider, themeProvider, _) {
+          return MaterialApp(
+            title: 'YOUSSEF APP',
+            debugShowCheckedModeBanner: false,
+            theme: WhatsAppTheme.lightTheme,
+            darkTheme: WhatsAppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
+            builder: (context, child) {
+              final mediaQuery = MediaQuery.of(context);
+              return Directionality(
+                textDirection: localeProvider.isRtl ? TextDirection.rtl : TextDirection.ltr,
+                child: MediaQuery(
+                  data: mediaQuery.copyWith(
+                    textScaler: TextScaler.linear(themeProvider.fontScale),
+                  ),
+                  child: child ?? const SizedBox(),
+                ),
+              );
+            },
+            home: const SplashScreen(),
           );
         },
-        home: const SplashScreen(),
       ),
     );
   }
 }
+
