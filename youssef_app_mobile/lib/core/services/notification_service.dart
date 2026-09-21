@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'sound_service.dart';
 
 /// Notification Service for incoming messages, calls, and updates
 /// Fully handles Android 13+ notification permissions, channels, and heads-up notifications.
@@ -12,6 +15,10 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  String? activeChatId;
+  final Map<String, StreamSubscription> _chatListeners = {};
+  StreamSubscription? _chatsListSub;
+  DateTime _serviceStartTime = DateTime.now();
 
   static const String _messageChannelId = 'whatsapp_messages_channel';
   static const String _messageChannelName = 'رسائل المحادثات';
@@ -196,5 +203,104 @@ class NotificationService {
   Future<void> cancelAll() async {
     if (kIsWeb) return;
     await _notificationsPlugin.cancelAll();
+  }
+
+  /// Set the currently active open chat screen (avoids duplicate notification when already in chat)
+  void setActiveChat(String? chatId) {
+    activeChatId = chatId;
+  }
+
+  /// Start live real-time listener for incoming messages across all conversations
+  void startListeningForUser(String currentUid) {
+    if (kIsWeb || currentUid.isEmpty) return;
+    _serviceStartTime = DateTime.now();
+    stopListening();
+
+    try {
+      _chatsListSub = FirebaseFirestore.instance
+          .collection('chats')
+          .where('participants', arrayContains: currentUid)
+          .snapshots()
+          .listen((chatsSnap) {
+        for (final doc in chatsSnap.docs) {
+          final chatId = doc.id;
+          if (_chatListeners.containsKey(chatId)) continue;
+
+          // Attach listener for the latest message in this conversation
+          _chatListeners[chatId] = FirebaseFirestore.instance
+              .collection('chats')
+              .doc(chatId)
+              .collection('messages')
+              .orderBy('timestamp', descending: true)
+              .limit(1)
+              .snapshots()
+              .listen((msgSnap) {
+            if (msgSnap.docs.isEmpty) return;
+            final msgDoc = msgSnap.docs.first;
+            final data = msgDoc.data();
+            final senderId = data['senderId']?.toString() ?? '';
+
+            // Ignore messages sent by current user
+            if (senderId == currentUid) return;
+
+            // Ignore if user is currently looking at this active chat
+            if (chatId == activeChatId) return;
+
+            // Only notify for messages arriving after listener started
+            final ts = data['timestamp'];
+            DateTime? msgTime;
+            if (ts is Timestamp) {
+              msgTime = ts.toDate();
+            }
+            if (msgTime != null && msgTime.isBefore(_serviceStartTime)) {
+              return;
+            }
+
+            final senderName = data['senderName']?.toString() ?? 'رسالة جديدة';
+            String text = data['text']?.toString() ?? '';
+            final messageType = data['type']?.toString() ?? 'text';
+
+            if (messageType == 'image') {
+              text = '📷 أرسل صورة جديدة';
+            } else if (messageType == 'audio') {
+              text = '🎤 تسجيل صوتي جديد';
+            } else if (messageType == 'video') {
+              text = '🎥 مقطع فيديو';
+            } else if (messageType == 'call') {
+              text = '📞 مكالمة واردة';
+            } else if (text.startsWith('🔒#YF:')) {
+              text = '🔒 رسالة مشفرة جديدة';
+            }
+
+            // Fire high-priority Heads-up Notification
+            showMessageNotification(
+              id: msgDoc.id.hashCode,
+              senderName: senderName,
+              messageText: text,
+              chatId: chatId,
+            );
+
+            // Play incoming sound
+            SoundService.instance.playMessageReceived();
+          }, onError: (err) {
+            debugPrint('Error in chat message listener: $err');
+          });
+        }
+      }, onError: (err) {
+        debugPrint('Error in chats list listener: $err');
+      });
+    } catch (e) {
+      debugPrint('Failed to initialize startListeningForUser: $e');
+    }
+  }
+
+  /// Stop and clean up listeners
+  void stopListening() {
+    _chatsListSub?.cancel();
+    _chatsListSub = null;
+    for (final sub in _chatListeners.values) {
+      sub.cancel();
+    }
+    _chatListeners.clear();
   }
 }

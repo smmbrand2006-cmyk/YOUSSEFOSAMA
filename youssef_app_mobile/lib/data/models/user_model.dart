@@ -38,6 +38,32 @@ class UserModel {
     );
   }
 
+  factory UserModel.fromMap(Map<String, dynamic> data) {
+    return UserModel(
+      uid: data['uid'] ?? '',
+      displayName: data['displayName'] ?? 'مستخدم',
+      userCode: data['userCode'] ?? '',
+      email: data['email'] ?? '',
+      bio: data['bio'] ?? 'مرحباً! أنا أستخدم تطبيق يوسف.',
+      photoUrl: data['photoUrl'] ?? data['avatarUrl'],
+      isOnline: data['isOnline'] ?? false,
+      blockedUsers: List<String>.from(data['blockedUsers'] ?? []),
+    );
+  }
+
+  Map<String, dynamic> toJsonMap() {
+    return {
+      'uid': uid,
+      'displayName': displayName,
+      'userCode': userCode,
+      'email': email,
+      'bio': bio,
+      'photoUrl': photoUrl,
+      'isOnline': isOnline,
+      'blockedUsers': blockedUsers,
+    };
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'uid': uid,

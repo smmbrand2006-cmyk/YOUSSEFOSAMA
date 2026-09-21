@@ -1,9 +1,14 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 
 class AuthService {
+  static const String _cachedUserKey = 'youssef_cached_user_profile';
+  static const String _cachedSessionKey = 'youssef_session_active';
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -130,22 +135,24 @@ class AuthService {
       }
     }
 
+    UserModel loggedInUser;
     final userDoc = await _firestore.collection('users').doc(cred.user!.uid).get();
     if (userDoc.exists) {
-      return UserModel.fromFirestore(userDoc);
+      loggedInUser = UserModel.fromFirestore(userDoc);
     } else {
       // Create document if missing
       final userCode = input.contains('@') ? await _generateUniqueUserCode() : input.replaceAll('#', '').trim();
-      final newUser = UserModel(
+      loggedInUser = UserModel(
         uid: cred.user!.uid,
         displayName: cred.user!.displayName ?? input.split('@')[0],
         userCode: userCode,
         email: targetEmail,
         isOnline: true,
       );
-      await _firestore.collection('users').doc(cred.user!.uid).set(newUser.toMap());
-      return newUser;
+      await _firestore.collection('users').doc(cred.user!.uid).set(loggedInUser.toMap());
     }
+    await saveCachedUser(loggedInUser);
+    return loggedInUser;
   }
 
   /// Register new user account with Email or Phone/Code
@@ -185,16 +192,69 @@ class AuthService {
     );
 
     await _firestore.collection('users').doc(cred.user!.uid).set(newUser.toMap());
+    await saveCachedUser(newUser);
     return newUser;
   }
 
-  /// Get profile document
+  /// Save user profile to local device storage for 0ms startup and offline resilience
+  Future<void> saveCachedUser(UserModel user) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cachedUserKey, jsonEncode(user.toJsonMap()));
+      await prefs.setBool(_cachedSessionKey, true);
+    } catch (_) {}
+  }
+
+  /// Get cached profile from device storage
+  Future<UserModel?> getCachedUser() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isSessionActive = prefs.getBool(_cachedSessionKey) ?? false;
+      if (!isSessionActive) return null;
+      final rawJson = prefs.getString(_cachedUserKey);
+      if (rawJson != null && rawJson.isNotEmpty) {
+        final map = jsonDecode(rawJson) as Map<String, dynamic>;
+        return UserModel.fromMap(map);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Clear cached user on explicit manual sign-out ONLY
+  Future<void> clearCachedUser() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_cachedUserKey);
+      await prefs.setBool(_cachedSessionKey, false);
+    } catch (_) {}
+  }
+
+  /// Get profile document with 0ms local cache fallback (Never logs user out)
   Future<UserModel?> getCurrentUserProfile() async {
+    final cached = await getCachedUser();
     final user = _auth.currentUser;
-    if (user == null) return null;
-    final doc = await _firestore.collection('users').doc(user.uid).get();
-    if (!doc.exists) return null;
-    return UserModel.fromFirestore(doc);
+
+    if (user == null) {
+      // If FirebaseAuth token is still loading or device is offline, rely on cached session
+      return cached;
+    }
+
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get(
+        const GetOptions(source: Source.serverAndCache),
+      ).timeout(const Duration(seconds: 4));
+
+      if (doc.exists) {
+        final fresh = UserModel.fromFirestore(doc);
+        await saveCachedUser(fresh);
+        return fresh;
+      }
+    } catch (_) {
+      // Network timeout or offline -> safely return cached user
+      if (cached != null) return cached;
+    }
+
+    return cached;
   }
 
   /// Update Profile
@@ -221,10 +281,15 @@ class AuthService {
 
     if (data.isNotEmpty) {
       await _firestore.collection('users').doc(user.uid).set(data, SetOptions(merge: true));
+      // Refresh cache
+      final updated = await getCurrentUserProfile();
+      if (updated != null) {
+        await saveCachedUser(updated);
+      }
     }
   }
 
-  /// Sign Out
+  /// Sign Out (Manual explicit user sign-out ONLY)
   Future<void> signOut() async {
     final user = _auth.currentUser;
     if (user != null) {
@@ -235,6 +300,7 @@ class AuthService {
         });
       } catch (_) {}
     }
+    await clearCachedUser();
     await _auth.signOut();
   }
 }

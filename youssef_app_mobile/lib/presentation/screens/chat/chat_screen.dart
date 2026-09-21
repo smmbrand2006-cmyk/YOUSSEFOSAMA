@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/whatsapp_colors.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/services/sound_service.dart';
 import '../../../core/utils/date_formatter.dart';
 import '../../../core/utils/encryption_helper.dart';
@@ -16,6 +17,7 @@ import '../../widgets/chat_input_bar.dart';
 import '../../widgets/custom_avatar.dart';
 import '../../widgets/message_bubble.dart';
 import '../../widgets/whatsapp_wallpaper.dart';
+import '../../widgets/animated_popup_menu.dart';
 import '../calls/call_screen.dart';
 import '../profile/profile_screen.dart';
 
@@ -39,6 +41,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    NotificationService.instance.setActiveChat(widget.chat.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final chatProvider = Provider.of<ChatProvider>(context, listen: false);
@@ -46,6 +49,14 @@ class _ChatScreenState extends State<ChatScreen> {
         chatProvider.markAsRead(widget.chat.id, auth.currentUser!.uid);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    NotificationService.instance.setActiveChat(null);
+    _textController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _scrollToBottom() {
@@ -246,13 +257,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   @override
-  void dispose() {
-    _textController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final chatProvider = Provider.of<ChatProvider>(context);
@@ -377,34 +381,54 @@ class _ChatScreenState extends State<ChatScreen> {
             builder: (context, snapshot) {
               final messages = snapshot.data ?? [];
               final isDark = Theme.of(context).brightness == Brightness.dark;
-              final menuTextColor = isDark ? WhatsAppColors.textPrimary : WhatsAppColors.lightTextPrimary;
-              return PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert),
-                color: isDark ? WhatsAppColors.surfaceCard : WhatsAppColors.lightSurfaceCard,
-                itemBuilder: (context) => [
-                  PopupMenuItem(value: "profile", child: Text("عرض جهة الاتصال", style: TextStyle(color: menuTextColor))),
-                  PopupMenuItem(value: "starred", child: Text("الرسائل المميزة بنجمة ⭐", style: TextStyle(color: menuTextColor))),
-                  PopupMenuItem(value: "mute", child: Text("كتم الإشعارات", style: TextStyle(color: menuTextColor))),
-                  PopupMenuItem(value: "clear", child: Text("مسح محتوى الدردشة", style: TextStyle(color: menuTextColor))),
-                ],
-                onSelected: (val) {
-                  if (val == "profile") {
-                    Navigator.push(
+              return AnimatedThreeDotsMenuButton(
+                isDark: isDark,
+                items: [
+                  AnimatedMenuItem(
+                    id: "profile",
+                    title: "عرض جهة الاتصال",
+                    subtitle: "معلومات وبيانات الحساب",
+                    icon: Icons.person_rounded,
+                    iconColor: const Color(0xFF6366F1),
+                    onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                    );
-                  } else if (val == "starred") {
-                    _showStarredMessagesDialog(messages, currentUser.uid);
-                  } else if (val == "mute") {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("تم كتم إشعارات المحادثة مؤقتاً")),
-                    );
-                  } else if (val == "clear") {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("تم مسح السجل المحلي للدردشة بنجاح")),
-                    );
-                  }
-                },
+                    ),
+                  ),
+                  AnimatedMenuItem(
+                    id: "starred",
+                    title: "الرسائل المميزة بنجمة",
+                    subtitle: "عرض الرسائل المحفوظة",
+                    icon: Icons.star_rounded,
+                    iconColor: Colors.amber,
+                    onTap: () => _showStarredMessagesDialog(messages, currentUser.uid),
+                  ),
+                  AnimatedMenuItem(
+                    id: "mute",
+                    title: "كتم الإشعارات",
+                    subtitle: "إيقاف تنبيهات المحادثة",
+                    icon: Icons.notifications_off_rounded,
+                    iconColor: Colors.orange,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("تم كتم إشعارات المحادثة مؤقتاً")),
+                      );
+                    },
+                  ),
+                  AnimatedMenuItem(
+                    id: "clear",
+                    title: "مسح محتوى الدردشة",
+                    subtitle: "تفريغ الرسائل محلياً",
+                    icon: Icons.delete_sweep_rounded,
+                    iconColor: Colors.redAccent,
+                    isDestructive: true,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("تم مسح السجل المحلي للدردشة بنجاح")),
+                      );
+                    },
+                  ),
+                ],
               );
             },
           ),

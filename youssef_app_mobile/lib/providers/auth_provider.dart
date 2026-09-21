@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/models/user_model.dart';
 import '../data/services/auth_service.dart';
@@ -6,6 +7,7 @@ import '../data/services/realtime_service.dart';
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final RealtimeService _realtimeService = RealtimeService();
+  final Completer<void> _initCompleter = Completer<void>();
 
   UserModel? _currentUser;
   bool _isLoading = true;
@@ -15,6 +17,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _currentUser != null;
   String? get errorMessage => _errorMessage;
+  Future<void> get initializationDone => _initCompleter.future;
 
   AuthProvider() {
     _init();
@@ -22,18 +25,31 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _init() async {
     _isLoading = true;
-    notifyListeners();
 
+    // 1. Instant 0ms cached user restore
+    try {
+      final cached = await _authService.getCachedUser();
+      if (cached != null) {
+        _currentUser = cached;
+        _isLoading = false;
+        notifyListeners();
+      }
+    } catch (_) {}
+
+    // 2. Validate/refresh with Firestore & Auth
     try {
       final user = await _authService.getCurrentUserProfile();
-      _currentUser = user;
       if (user != null) {
+        _currentUser = user;
         _realtimeService.setupPresence(user.uid);
       }
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
       _isLoading = false;
+      if (!_initCompleter.isCompleted) {
+        _initCompleter.complete();
+      }
       notifyListeners();
     }
   }

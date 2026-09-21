@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/whatsapp_colors.dart';
+import '../../../core/services/notification_service.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/chat_provider.dart';
 import '../../../providers/locale_provider.dart';
@@ -8,6 +10,7 @@ import '../../../providers/theme_provider.dart';
 import '../chat/select_contact_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
+import '../../widgets/animated_popup_menu.dart';
 import 'tabs/calls_tab.dart';
 import 'tabs/chats_tab.dart';
 import 'tabs/communities_tab.dart';
@@ -38,7 +41,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       if (auth.currentUser != null) {
         Provider.of<ChatProvider>(context, listen: false).initChats(auth.currentUser!.uid);
+        NotificationService.instance.startListeningForUser(auth.currentUser!.uid);
       }
+      PermissionService.instance.promptAllPermissionsIfNeeded(context);
     });
   }
 
@@ -151,45 +156,63 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            color: isDark ? WhatsAppColors.surfaceCard : WhatsAppColors.lightSurfaceCard,
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: "theme",
-                child: Row(
-                  children: [
-                    Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, size: 18, color: isDark ? Colors.amber : WhatsAppColors.primaryGreen),
-                    const SizedBox(width: 8),
-                    Text(isDark ? "الوضع الفاتح ☀️" : "الوضع الداكن 🌙", style: TextStyle(color: primaryTextColor)),
-                  ],
-                ),
+          AnimatedThreeDotsMenuButton(
+            isDark: isDark,
+            items: [
+              AnimatedMenuItem(
+                id: "theme",
+                title: isDark ? "الوضع الفاتح ☀️" : "الوضع الداكن 🌙",
+                subtitle: "تغيير مظهر وألوان التطبيق",
+                icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                iconColor: isDark ? Colors.amber : WhatsAppColors.primaryGreen,
+                onTap: () => themeProvider.setTheme(isDark ? 'light' : 'dark'),
               ),
-              PopupMenuItem(value: "group", child: Text(locale.t('new_group'), style: TextStyle(color: primaryTextColor))),
-              PopupMenuItem(value: "profile", child: Text(locale.t('profile'), style: TextStyle(color: primaryTextColor))),
-              PopupMenuItem(value: "starred", child: Text(locale.t('starred_messages'), style: TextStyle(color: primaryTextColor))),
-              PopupMenuItem(value: "settings", child: Text(locale.t('settings'), style: TextStyle(color: primaryTextColor))),
-            ],
-            onSelected: (val) {
-              if (val == "theme") {
-                themeProvider.setTheme(isDark ? 'light' : 'dark');
-              } else if (val == "profile") {
-                Navigator.push(
+              AnimatedMenuItem(
+                id: "profile",
+                title: locale.t('profile'),
+                subtitle: "بياناتك وصورتك الشخصية",
+                icon: Icons.person_rounded,
+                iconColor: const Color(0xFF6366F1),
+                onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                );
-              } else if (val == "settings") {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                );
-              } else if (val == "group") {
-                Navigator.push(
+                ),
+              ),
+              AnimatedMenuItem(
+                id: "group",
+                title: locale.t('new_group'),
+                subtitle: "إنشاء محادثة جماعية",
+                icon: Icons.group_add_rounded,
+                iconColor: const Color(0xFF38BDF8),
+                onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const SelectContactScreen()),
-                );
-              }
-            },
+                ),
+              ),
+              AnimatedMenuItem(
+                id: "starred",
+                title: locale.t('starred_messages'),
+                subtitle: "الرسائل المحفوظة والمميزة",
+                icon: Icons.star_rounded,
+                iconColor: Colors.amber,
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("الرسائل المميزة بنجمة تظهر داخل كل شات")),
+                  );
+                },
+              ),
+              AnimatedMenuItem(
+                id: "settings",
+                title: locale.t('settings'),
+                subtitle: "الخصوصية، الإشعارات، والخط",
+                icon: Icons.settings_rounded,
+                iconColor: WhatsAppColors.primaryGreen,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
+              ),
+            ],
           ),
         ],
       ),

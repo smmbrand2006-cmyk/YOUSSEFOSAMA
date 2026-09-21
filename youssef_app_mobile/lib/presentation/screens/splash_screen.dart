@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/whatsapp_colors.dart';
 import '../../providers/auth_provider.dart';
 import 'auth/login_screen.dart';
 import 'home/home_screen.dart';
+import 'intro/intro_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -20,10 +22,35 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkAuth() async {
-    await Future.delayed(const Duration(milliseconds: 1400));
+    // 1. Splash minimum brand display
+    await Future.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
+
+    // 2. Wait for auth initialization (local cache and remote) to complete
+    if (auth.isLoading) {
+      await auth.initializationDone;
+    }
+    if (!mounted) return;
+
+    // 3. Check if user saw Egyptian intro onboarding
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final seenIntro = prefs.getBool('youssef_seen_intro') ?? false;
+      if (!mounted) return;
+      if (!seenIntro) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const IntroScreen()),
+        );
+        return;
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    // 4. If authenticated, straight to Home
     if (auth.isAuthenticated) {
       Navigator.pushReplacement(
         context,
