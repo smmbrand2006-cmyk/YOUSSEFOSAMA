@@ -175,17 +175,17 @@
 /* PWA Banner Styles */
 .pwaBannerContainer {
   position: fixed;
-  bottom: 80px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 32px);
-  max-width: 500px;
-  z-index: 8000;
+  max-width: 520px;
+  z-index: 9999;
   background: linear-gradient(135deg, #182234 0%, #0F172A 100%);
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(99, 102, 241, 0.25);
+  border: 1px solid rgba(37, 211, 102, 0.45);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7), 0 0 25px rgba(37, 211, 102, 0.25);
   border-radius: 20px;
-  padding: 14px 16px;
+  padding: 14px 18px;
   display: flex;
   align-items: center;
   gap: 14px;

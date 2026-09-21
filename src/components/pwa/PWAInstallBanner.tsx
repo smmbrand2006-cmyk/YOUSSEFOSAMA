@@ -58,7 +58,7 @@ export default function PWAInstallBanner() {
     };
   }, []);
 
-  if (!mounted || isDismissed || (!canInstall && !isIOS)) {
+  if (!mounted || isDismissed) {
     return null;
   }
 
@@ -93,11 +93,11 @@ export default function PWAInstallBanner() {
       </div>
 
       <div className={styles.pwaBannerInfo}>
-        <div className={styles.pwaBannerTitle}>تثبيت YOUSSEF APP كـ تطبيق</div>
+        <div className={styles.pwaBannerTitle}>تطبيق YOUSSEF APP متوفر الآن 📱</div>
         <div className={styles.pwaBannerSub}>
           {isIOS
-            ? "أضف للشاشة الرئيسية لتجربة تطبيق أصلي"
-            : "تطبيق سريع، خفيف، بدون شريط المتصفح"}
+            ? "أضف للشاشة الرئيسية لتجربة تطبيق أصلي سريع"
+            : "حمّل تطبيق الأندرويد الرسمي (APK) لتجربة أسرع بدون متصفح"}
         </div>
 
         {showIOSGuide && (
@@ -115,24 +115,45 @@ export default function PWAInstallBanner() {
           <a
             href="https://github.com/smmbrand2006-cmyk/YOUSSEFOSAMA/releases/latest/download/YOUSSEF_APP.apk"
             className={styles.pwaInstallBtn}
-            style={{ textDecoration: "none", background: "linear-gradient(135deg, #00A884, #008069)", display: "flex", alignItems: "center", gap: "6px" }}
+            style={{
+              textDecoration: "none",
+              background: "linear-gradient(135deg, #25D366, #128C7E)",
+              boxShadow: "0 4px 14px rgba(37, 211, 102, 0.4)",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontWeight: "800",
+            }}
             title="تحميل تطبيق أندرويد الحقيقي (APK)"
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Download size={15} />
+            <Download size={16} />
             تحميل APK
           </a>
         )}
 
-        <button
-          type="button"
-          className={styles.pwaInstallBtn}
-          onClick={handleInstallClick}
-        >
-          <Download size={15} />
-          {isIOS ? "طريقة التثبيت" : "تثبيت PWA"}
-        </button>
+        {canInstall && (
+          <button
+            type="button"
+            className={styles.pwaInstallBtn}
+            onClick={handleInstallClick}
+          >
+            <Download size={15} />
+            تثبيت PWA
+          </button>
+        )}
+
+        {isIOS && (
+          <button
+            type="button"
+            className={styles.pwaInstallBtn}
+            onClick={handleInstallClick}
+          >
+            <Download size={15} />
+            طريقة التثبيت
+          </button>
+        )}
 
         <button
           type="button"

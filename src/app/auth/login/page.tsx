@@ -63,6 +63,70 @@ export default function LoginPage() {
             أدخل كودك الخاص وكلمة المرور للدخول إلى محادثاتك
           </p>
 
+          {/* Direct Android APK Download Banner */}
+          <a
+            href="https://github.com/smmbrand2006-cmyk/YOUSSEFOSAMA/releases/latest/download/YOUSSEF_APP.apk"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "10px 14px",
+              marginBottom: "18px",
+              borderRadius: "14px",
+              background: "linear-gradient(135deg, rgba(37, 211, 102, 0.12) 0%, rgba(18, 140, 126, 0.08) 100%)",
+              border: "1px solid rgba(37, 211, 102, 0.35)",
+              textDecoration: "none",
+              transition: "transform 0.15s ease, border-color 0.15s ease",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "10px",
+                  background: "linear-gradient(135deg, #25D366, #128C7E)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 4px 10px rgba(37, 211, 102, 0.3)",
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ color: "#fff", fontSize: "20px" }}>
+                  android
+                </span>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#FFFFFF" }}>
+                  تحميل تطبيق الأندرويد الرسمي
+                </div>
+                <div style={{ fontSize: "11px", color: "#25D366" }}>
+                  تنزيل مباشر وسريع (APK) • بدون متصفح
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                background: "#25D366",
+                color: "#0B0E14",
+                fontWeight: "700",
+                fontSize: "12px",
+                padding: "6px 12px",
+                borderRadius: "8px",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <span>تحميل</span>
+              <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>
+                download
+              </span>
+            </div>
+          </a>
+
           <form className={styles.authForm} onSubmit={handleLogin}>
             {error && <div className={styles.authError}>{error}</div>}
 
